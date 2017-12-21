@@ -1,0 +1,15 @@
+.gradle/
+gradle/
+.idea/dataSources.ids
+.idea/dataSources.local.xml
+.idea/dataSources.xml
+.idea/dataSources/
+.idea/libraries/
+.idea/misc.xml
+.idea/workspace.xml
+.idea/uiDesigner.xml
+RutBot.properties
+build/
+logs/
+.idea/inspectionProfiles/
+out/

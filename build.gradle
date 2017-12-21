@@ -1,0 +1,42 @@
+//apply plugin: 'kotlin2js'
+
+plugins { id "org.jetbrains.kotlin.jvm" version "1.1.51" }
+
+kotlin { experimental { coroutines 'enable' } }
+
+jar {
+    manifest { attributes 'Main-Class': 'bot.RutBot' }
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+}
+
+repositories {
+    jcenter()
+    maven { url "https://dl.bintray.com/kotlin/exposed" }
+}
+
+sourceSets { main.java.srcDirs += 'src/main/kotlin' }
+
+dependencies {
+    compile "org.jetbrains.kotlin:kotlin-reflect:1.1.51"
+    compile "org.jetbrains.kotlinx:kotlinx-coroutines-core:0.19.1"
+//    compile "org.jetbrains.kotlinx:kotlinx-html-jvm:0.6.2"
+    compile "org.slf4j:slf4j-api:1.7.25"
+    compile "ch.qos.logback:logback-classic:1.2.3"
+    compile "com.googlecode.json-simple:json-simple:1.1.1"
+//    compile "org.eclipse.jetty:jetty-server:9.3.18.v20170406"
+//    compile "org.eclipse.jetty:jetty-servlet:9.3.18.v20170406"
+//    compile "mysql:mysql-connector-java:8.0.7-dmr"
+    compile "org.apache.httpcomponents:httpclient:4.5.3"
+    compile 'com.squareup.okhttp3:okhttp:3.9.0'
+//    compile 'javax.mail:mail:1.4.7'
+//    compile 'com.jcraft:jsch:0.1.53'
+//    compile 'ws.wamp.jawampa:jawampa-core:0.5.0'
+//    compile 'ws.wamp.jawampa:jawampa-netty:0.5.0'
+
+    compile 'org.jetbrains.exposed:exposed:0.8.7'
+    //compile 'com.github.angiolep:akka-wamp_2.12:0.15.1'
+
+    testCompile 'com.h2database:h2:1.4.196'
+}
+
+
