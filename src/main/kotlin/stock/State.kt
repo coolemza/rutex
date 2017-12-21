@@ -1,4 +1,9 @@
+package stock
+
 import ch.qos.logback.classic.Level
+import data.Depth
+import data.Order
+import data.SocketState
 import db.*
 import kotlinx.coroutines.experimental.Deferred
 import kotlinx.coroutines.experimental.cancelAndJoin

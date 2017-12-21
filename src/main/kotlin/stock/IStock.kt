@@ -1,3 +1,7 @@
+package stock
+
+import data.Order
+import data.SocketState
 import db.*
 import kotlinx.coroutines.experimental.NonCancellable
 import kotlinx.coroutines.experimental.async

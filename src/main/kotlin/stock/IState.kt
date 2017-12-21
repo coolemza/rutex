@@ -1,3 +1,7 @@
+package stock
+
+import data.Order
+import data.SocketState
 import db.OrderStatus
 import db.PairInfo
 import db.StockKey
@@ -5,9 +9,6 @@ import kotlinx.coroutines.experimental.Deferred
 import org.slf4j.Logger
 import java.math.BigDecimal
 import java.time.LocalDateTime
-import java.time.temporal.ChronoUnit
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.write
 
 enum class Book { asks, bids }
 
