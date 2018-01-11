@@ -1,9 +1,7 @@
-import db.*
+import db.initDb
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.runBlocking
 import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils.create
-import org.jetbrains.exposed.sql.transactions.transaction
 import stock.IStock
 import stock.State
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -17,11 +15,9 @@ object RutEx {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        Database.connect("jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE", driver = "org.h2.Driver")
-
-        transaction { create(Rates, Wallet) }
-
         try {
+            initDb()
+
             Runtime.getRuntime().addShutdownHook(Thread { RutEx.stop() })
 
             start()
@@ -31,8 +27,8 @@ object RutEx {
     }
 
     fun start() {
-        val stocks = listOf("Wex")
-        stockList = stocks.map { it to Class.forName("stocks.$it").kotlin.primaryConstructor?.call(State(it)) as IStock }.toMap()
+        val stocks = listOf("WEX")
+        stockList = stocks.map { it to Class.forName("stock.$it").kotlin.primaryConstructor?.call(State(it)) as IStock }.toMap()
 
         stockList.forEach { it.value.start() }
 
@@ -44,6 +40,6 @@ object RutEx {
     }
 
     fun stop() {
-
+        stop = true
     }
 }

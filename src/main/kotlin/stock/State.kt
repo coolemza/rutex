@@ -2,8 +2,8 @@ package stock
 
 import ch.qos.logback.classic.Level
 import data.Depth
+import data.DepthBook
 import data.Order
-import data.SocketState
 import db.*
 import kotlinx.coroutines.experimental.Deferred
 import kotlinx.coroutines.experimental.cancelAndJoin
@@ -16,6 +16,8 @@ import java.io.IOException
 import java.math.BigDecimal
 import java.net.SocketTimeoutException
 import java.time.LocalDateTime
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.TimeUnit
 
 class State(override val name: String): IState {
@@ -27,6 +29,7 @@ class State(override val name: String): IState {
     override var pairs = getPairs(name)
     override var currencies = getGurrncies(name)
     override var activeList = mutableListOf<Order>()
+    override var debugWallet = ConcurrentHashMap<String, BigDecimal>()
 
     override val coroutines = mutableListOf<Deferred<Unit>>()
 
@@ -39,8 +42,8 @@ class State(override val name: String): IState {
     val okHttp = OkHttpClient()
     val mediaType = MediaType.parse("application/x-www-form-urlencoded; charset=utf-8")!!
 
-    override val socketState = SocketState()
-    override var updated = SocketState()
+    override val socketState = DepthBook()
+    override var updated = DepthBook()
     override val wallet = mapOf<String, BigDecimal>()
     val walletAvailable = mutableMapOf<String, BigDecimal>()
     val walletLocked = mutableMapOf<String, BigDecimal>()
@@ -49,7 +52,7 @@ class State(override val name: String): IState {
     override fun getLocked(orderList: MutableList<Order>) =  orderList.groupBy { it.getLockCur() }
             .map { it.key to it.value.sumByDecimal { it.getLockAmount() } }.toMap()
 
-    override fun OnStateUpdate(state: SocketState?, update: Update?): Boolean {
+    override fun OnStateUpdate(state: DepthBook?, update: Update?): Boolean {
         val time = LocalDateTime.now()
 
         stateTime = time

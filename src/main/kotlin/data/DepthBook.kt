@@ -5,7 +5,7 @@ import java.math.BigDecimal
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
-class SocketState() : LinkedHashMap<String, MutableMap<Book, MutableList<Depth>>>() {
+class DepthBook() : LinkedHashMap<String, MutableMap<Book, MutableList<Depth>>>() {
     val pairCount = mutableMapOf<String, Long>()
 
     constructor(pair: String, depthLimit: Int = 0) : this() {
@@ -17,7 +17,7 @@ class SocketState() : LinkedHashMap<String, MutableMap<Book, MutableList<Depth>>
         }
     }
 
-    constructor(update: SocketState): this() {
+    constructor(update: DepthBook): this() {
         update.forEach { pair, p ->
             p.forEach { type ->
                 type.value.forEach { d ->
@@ -38,7 +38,7 @@ class SocketState() : LinkedHashMap<String, MutableMap<Book, MutableList<Depth>>
 //        }
 //    }
 
-    fun replace(update: SocketState) {
+    fun replace(update: DepthBook) {
         update.forEach { val pair = it.key
             it.value.forEach { val type = it.key
                 it.value.forEachIndexed { index, depth ->

@@ -1,13 +1,14 @@
 package stock
 
+import data.DepthBook
 import data.Order
-import data.SocketState
 import db.*
 import kotlinx.coroutines.experimental.NonCancellable
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.newSingleThreadContext
 import java.math.BigDecimal
+import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -19,17 +20,17 @@ data class WithdrawResponse(val withdraw_id: Long, val status: WithdrawStatus)
 interface IStock {
     val state: IState
 
-    fun depth(url: Map<String, String>, updateTo: SocketState, pair: String): SocketState?
+    fun getDepth(url: Map<String, String>, pair: String, updateTo: DepthBook? = null): DepthBook?
     fun getBalance(): Map<String, BigDecimal>?
-    fun GetApiRequest(key: StockKey, urlParam: Map<String, String>, data: Any? = null): ApiRequest
-    fun OrderInfo(order: Order, updateTotal: Boolean = true)
+    fun getApiRequest(key: StockKey, urlParam: Map<String, String>, data: Any? = null): ApiRequest
+    fun getOrderInfo(order: Order, updateTotal: Boolean = true)
     fun putOrder(orders: List<Order>)
     fun start()
     fun stop()
     fun updateHistory(fromId: Long): Long
     fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): WithdrawResponse
 
-    fun debugWallet(debugWallet: MutableMap<String, BigDecimal>) = async(newSingleThreadContext("stockWallet")) {
+    fun debugWallet(debugWallet: ConcurrentMap<String, BigDecimal>) = async(newSingleThreadContext("stockWallet")) {
         while (isActive) {
             kotlinx.coroutines.experimental.run(NonCancellable) {
                 getBalance()?.let { debugWallet.putAll(it) }
@@ -42,7 +43,7 @@ interface IStock {
         while (isActive) {
             RutEx.stateLock.read { activeList.filter { it.order_id != 0L } }.forEach {
                 kotlinx.coroutines.experimental.run(NonCancellable) {
-                    OrderInfo(it)
+                    getOrderInfo(it)
                 }
             }
         }

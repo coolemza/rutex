@@ -1,6 +1,19 @@
-//apply plugin: 'kotlin2js'
+apply plugin: 'kotlin'
 
-plugins { id "org.jetbrains.kotlin.jvm" version "1.1.51" }
+buildscript {
+    ext.kotlin_version = '1.2.0'
+
+    repositories {
+        maven { url 'http://dl.bintray.com/kotlin/kotlin-eap-1.2' }
+        maven { url "https://kotlin.bintray.com/kotlinx" }
+        maven { url 'https://maven.google.com' }
+        jcenter()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+
+}
 
 kotlin { experimental { coroutines 'enable' } }
 
@@ -17,26 +30,17 @@ repositories {
 sourceSets { main.java.srcDirs += 'src/main/kotlin' }
 
 dependencies {
-    compile "org.jetbrains.kotlin:kotlin-reflect:1.1.51"
+    compile "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
     compile "org.jetbrains.kotlinx:kotlinx-coroutines-core:0.19.1"
-//    compile "org.jetbrains.kotlinx:kotlinx-html-jvm:0.6.2"
     compile "org.slf4j:slf4j-api:1.7.25"
     compile "ch.qos.logback:logback-classic:1.2.3"
     compile "com.googlecode.json-simple:json-simple:1.1.1"
-//    compile "org.eclipse.jetty:jetty-server:9.3.18.v20170406"
-//    compile "org.eclipse.jetty:jetty-servlet:9.3.18.v20170406"
 //    compile "mysql:mysql-connector-java:8.0.7-dmr"
     compile "org.apache.httpcomponents:httpclient:4.5.3"
     compile 'com.squareup.okhttp3:okhttp:3.9.0'
-//    compile 'javax.mail:mail:1.4.7'
-//    compile 'com.jcraft:jsch:0.1.53'
-//    compile 'ws.wamp.jawampa:jawampa-core:0.5.0'
-//    compile 'ws.wamp.jawampa:jawampa-netty:0.5.0'
 
-    compile 'org.jetbrains.exposed:exposed:0.8.7'
-    //compile 'com.github.angiolep:akka-wamp_2.12:0.15.1'
-
-    testCompile 'com.h2database:h2:1.4.196'
+    compile 'org.jetbrains.exposed:exposed:0.9.1'
+    compile 'com.h2database:h2:1.4.196'
 }
 
 
