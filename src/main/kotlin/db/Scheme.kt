@@ -1,10 +1,14 @@
 package db
 
+import db.Stock_Pair.autoIncrement
+import db.Stock_Pair.primaryKey
+import db.Wallet.references
 import org.jetbrains.exposed.dao.IntIdTable
 import org.jetbrains.exposed.sql.Table
 
 enum class WalletType { AVAILABLE, LOCKED, TOTAL }
 enum class OrderStatus { ACTIVE, PARTIAL, COMPLETED, CANCELED, FAILED }
+enum class KeyType { WALLET, TRADE, ACTIVE, DEBUG, HISTORY, WITHDRAW }
 
 object Currencies: IntIdTable() {
     val type = varchar("type", 4)
@@ -51,4 +55,14 @@ object Stock_Pair: Table() {
     val percent = decimal("percent", 20, 8)
     val enabled = bool("status") //TODO: refactor
     init { uniqueIndex(stock_id, pair_id) }
+}
+
+object Api_Keys: Table() {
+    val id = integer("id").autoIncrement().primaryKey()
+    val stock_id = integer("stock_id") references Stocks.id
+    val key_name = varchar("key_name", 64)
+    val apikey = varchar("apikey", 256)
+    val secret = varchar("secret", 256)
+    val nonce = long("nonce")
+    val type = enumeration("type", KeyType::class.java)
 }

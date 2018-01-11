@@ -2,6 +2,7 @@ package stock
 
 import data.DepthBook
 import data.Order
+import db.KeyType
 import db.OrderStatus
 import db.PairInfo
 import db.StockKey
@@ -42,11 +43,11 @@ interface IState {
 
     var depthLimit: Int
 
-    fun getWalletKey() = keys.find { it.type == "WALLET" }!!
-    fun getActiveKey() = keys.find { it.type == "ACTIVE" }!!
-    fun getWithdrawKey() = keys.find { it.type == "WITHDRAW" }!!
-    fun getHistoryKey() = keys.find { it.type == "HISTORY" }!!
-    fun getTradesKey() = keys.filter { it.type == "HISTORY" }
+    fun getWalletKey() = keys.find { it.type == KeyType.WALLET }!!
+    fun getActiveKey() = keys.find { it.type == KeyType.ACTIVE }!!
+    fun getWithdrawKey() = keys.find { it.type == KeyType.WITHDRAW }!!
+    fun getHistoryKey() = keys.find { it.type == KeyType.HISTORY }!!
+    fun getTradesKey() = keys.filter { it.type == KeyType.TRADE }
 
     fun getLocked(orderList: MutableList<Order> = activeList): Map<String, BigDecimal>
     fun OnStateUpdate(state: DepthBook?, update: Update?): Boolean
