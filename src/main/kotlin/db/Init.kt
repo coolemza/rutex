@@ -12,7 +12,7 @@ fun initDb() {
     Database.connect("jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE", driver = "org.h2.Driver")
 
     transaction {
-        create(Currencies, Pairs, Stocks, Stock_Pair, Api_Keys)
+        create(Currencies, Pairs, Stocks, Stock_Pair, Stock_Currency, Api_Keys)
     }
 
     val wexId = initStock("WEX")
@@ -24,23 +24,14 @@ fun initDb() {
     initKey(wexId, "HJ0NLZF3-AGHB7T0Z-HJ9ZCO83-KB1CJ8YZ-NZVTVMQ6", "0d601ed39dfae1fa52dfbb2b03de0198487f66ba6e0d7692b824d906f995624a", KeyType.DEBUG)
     initKey(wexId, "VBXDPA22-NS5W3FAO-IFKAR8QC-SUT678LM-YT6UASLB", "1e44fab9661d2e7bf696e9eab841623195715ac8566924fad9054f17196afb60", KeyType.WITHDRAW)
 
-    transaction {
-        val btcUsdId = Pairs.insert {
-            it[type] = "btc_usd"
-        } get Pairs.id
+    listOf("usd", "btc", "ltc", "eth", "dsh").forEach {
+        val curId = initCurrency(it, it != "usd")
+        initStockCurrency(wexId, curId)
+    }
 
-        val btcEId = Stocks.insert {
-            it[name] = "WEX"
-            it[history_last_id] = 0
-        } get Stocks.id
-
-        Stock_Pair.insert {
-            it[stock_id] = btcEId
-            it[pair_id] = btcUsdId
-            it[enabled] = true
-            it[minAmount] = BigDecimal.ONE
-            it[percent] = BigDecimal.TEN
-        } get Stock_Pair.id
+    listOf("btc_usd", "ltc_usd", "eth_usd", "dsh_usd").forEach {
+        val pairId = initPair(it)
+        val stockPairId = initStockKey(wexId, pairId)
     }
 }
 
@@ -57,13 +48,50 @@ fun initKey(stockId: Int, apiKey: String, secretPart: String, keyType: KeyType) 
     }
 }
 
-fun initStock(name: String): Int {
-    val id = transaction {
-        Stocks.insert {
-            it[Stocks.name] = "WEX"
-            it[history_last_id] = 0
-        } get Stocks.id
-    }
-    return  id;
+fun initStock(name: String) = transaction {
+    Stocks.insert {
+        it[Stocks.name] = name
+        it[history_last_id] = 0
+    } get Stocks.id
 }
+
+fun initPair(name: String) = transaction {
+    Pairs.insert {
+        it[type] = "btc_usd"
+    } get Pairs.id
+}
+
+fun initCurrency(name: String, crypto: Boolean) = transaction {
+    Currencies.insert {
+        it[type] = name
+        it[Currencies.crypto] = crypto
+    } get Currencies.id
+}
+
+fun initStockKey(stockId: Int, pairId: Int) = transaction {
+    Stock_Pair.insert {
+        it[stock_id] = stockId
+        it[pair_id] = pairId
+        it[enabled] = true
+        it[minAmount] = BigDecimal.ONE
+        it[percent] = BigDecimal.TEN
+    } get Stock_Pair.id
+}
+
+fun initStockCurrency(stockId: Int, curId: Int, withdrawMin: BigDecimal? = null, withdrawPercent: BigDecimal? = null,
+                      depositMin: BigDecimal? = null, depositPercent: BigDecimal? = null, address: String? = null,
+                      tag: String? = null) = transaction {
+    Stock_Currency.insert {
+        it[stock_id] = stockId
+        it[currency_id] = curId
+        it[enabled] = true
+        it[withdraw_min] = withdrawMin
+        it[withdraw_percent] = withdrawPercent
+        it[deposit_min] = depositMin
+        it[deposit_percent] = depositPercent
+        it[Stock_Currency.address] = address
+        it[Stock_Currency.tag] = tag
+    } get Stock_Currency.id
+}
+
 

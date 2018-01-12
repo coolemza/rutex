@@ -6,6 +6,7 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import stock.Update
 import java.math.BigDecimal
 import java.security.Key
 
@@ -26,11 +27,14 @@ fun getKeys(name: String): MutableList<StockKey> {
     return keys
 }
 
-fun getPairs(name: String): Map<String, PairInfo> {
-    return mapOf()
+fun getPairs(name: String) = transaction {
+    Stock_Pair.innerJoin(Pairs).innerJoin(Stocks)
+            .select { Stocks.name.eq(name) and Stock_Pair.enabled }
+            .groupBy { it[Pairs.type] }.entries
+            .associateBy({ it.key }) { PairInfo(it.value[0][Pairs.id], it.value[0][Stock_Pair.id], it.value[0][Stock_Pair.minAmount]) }
 }
 
-fun getGurrncies(name: String): Map<String, Pair<String, String>> {
+fun getCurrencies(name: String): Map<String, Pair<String, String>> {
     return mapOf()
 }
 
@@ -47,5 +51,9 @@ fun saveHistoryId(id: Long, stock_id: Int) {
 }
 
 fun updatePairs(update: Map<String, PairInfo>, stockName: String) {
+
+}
+
+fun saveBook(stockName: String, update: List<Update>) {
 
 }

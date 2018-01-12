@@ -7,6 +7,7 @@ import data.Order
 import db.*
 import kotlinx.coroutines.experimental.Deferred
 import kotlinx.coroutines.experimental.cancelAndJoin
+import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 import okhttp3.*
 import org.joda.time.DateTime
@@ -17,7 +18,6 @@ import java.math.BigDecimal
 import java.net.SocketTimeoutException
 import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.TimeUnit
 
 class State(override val name: String): IState {
@@ -27,7 +27,7 @@ class State(override val name: String): IState {
     override var id =  getStockId(name)
     override var keys = getKeys(name)
     override var pairs = getPairs(name)
-    override var currencies = getGurrncies(name)
+    override var currencies = getCurrencies(name)
     override var activeList = mutableListOf<Order>()
     override var debugWallet = ConcurrentHashMap<String, BigDecimal>()
 
@@ -37,7 +37,6 @@ class State(override val name: String): IState {
 
     override lateinit var stateTime: LocalDateTime
     lateinit var walletTime: LocalDateTime
-    var stateMT: Long = 0
     private var lastStateTime = LocalDateTime.now()
     val okHttp = OkHttpClient()
     val mediaType = MediaType.parse("application/x-www-form-urlencoded; charset=utf-8")!!
@@ -52,29 +51,23 @@ class State(override val name: String): IState {
     override fun getLocked(orderList: MutableList<Order>) =  orderList.groupBy { it.getLockCur() }
             .map { it.key to it.value.sumByDecimal { it.getLockAmount() } }.toMap()
 
-    override fun OnStateUpdate(state: DepthBook?, update: Update?): Boolean {
+    override fun OnStateUpdate(update: List<Update>): Boolean {
         val time = LocalDateTime.now()
-
         stateTime = time
-        stateMT = 0L
 
-        state?.let {
-            socketState.replace(it)
-            updated.replace(it)
-        }
-
-        update?.run {
-            val err = amount?.let { socketState.updateRate(pair, type, rate, it) } ?: socketState.removeRate(pair, type, rate)
+        update.forEach { upd ->
+            val err = upd.amount?.let { socketState.updateRate(upd.pair, upd.type, upd.rate, it) } ?: socketState.removeRate(upd.pair, upd.type, upd.rate)
             err?.let {
                 log.error(err)
                 return false
             }
-            updated.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }
-                    .add(0, Depth(rate, amount ?: BigDecimal.ZERO))
+            updated.getOrPut(upd.pair) { mutableMapOf() }.getOrPut(upd.type) { mutableListOf() }
+                    .add(0, Depth(upd.rate, upd.amount ?: BigDecimal.ZERO))
         }
 
-        updated.clear()
+        launch { saveBook(name, update) }
 
+        updated.clear()
         return true
     }
 

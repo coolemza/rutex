@@ -14,9 +14,7 @@ import java.util.concurrent.ConcurrentMap
 
 enum class Book { asks, bids }
 
-//data class StockKey(val key: String, val secret: String, var nonce: Long, val type: String)
-//data class PairInfo(val pairId: Int, val stockPairId: Int, var minAmount: BigDecimal)
-data class Update(val pair:String, val type: Book, val rate: BigDecimal, val amount: BigDecimal?)
+data class Update(val pair:String, val type: Book, val rate: BigDecimal, val amount: BigDecimal? = null)
 data class ApiRequest(val headers: Map<String, String>, val postData: String, val postReq: Map<String, String>)
 
 interface IState {
@@ -50,7 +48,7 @@ interface IState {
     fun getTradesKey() = keys.filter { it.type == KeyType.TRADE }
 
     fun getLocked(orderList: MutableList<Order> = activeList): Map<String, BigDecimal>
-    fun OnStateUpdate(state: DepthBook?, update: Update?): Boolean
+    fun OnStateUpdate(update: List<Update>): Boolean
     fun onWalletUpdate(update: Map<String, BigDecimal>? = null, plus: Pair<String, BigDecimal>? = null, minus: Pair<String, BigDecimal>? = null)
     fun onActive(deal_id: Long?, order_id: Long, amount: BigDecimal? = null, status: OrderStatus? = null, updateTotal: Boolean = true)
 //    fun UpdateProgress(o: Operation)

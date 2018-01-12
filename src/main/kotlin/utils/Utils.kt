@@ -12,6 +12,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import stock.IState
 import stock.IStock
+import stock.Update
 import java.math.BigDecimal
 
 fun getRollingLogger(name: String, logLevel: Level): Logger {
@@ -62,8 +63,8 @@ fun syncWallet(stock: IStock, state: IState, log:Logger) {
     } while (!walletSynchronized)
 }
 
-fun getUpdate(curState: DepthBook, newState: DepthBook, depthLimit: Int): DepthBook? {
-    val updated = DepthBook()
+fun getUpdate(curState: DepthBook, newState: DepthBook, depthLimit: Int): List<Update>? {
+    val updList = mutableListOf<Update>()
     newState.forEach { pair, p ->
         p.forEach {
             val type = it.key
@@ -74,26 +75,26 @@ fun getUpdate(curState: DepthBook, newState: DepthBook, depthLimit: Int): DepthB
 
                 if (cur == null) {
                     if (new != null) {
-                        updated.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(i, Depth(new))
+                        updList.add(Update(pair, type, new.rate, new.amount))
                     }
                 } else {
                     if (new == null) {
-                        updated.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(i, Depth(cur.rate))
+                        updList.add(Update(pair, type, cur.rate))
                     } else {
                         if (cur.rate == new.rate) {
                             if (cur.amount != new.amount) {
-                                updated.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(i, Depth(new))
+                                updList.add(Update(pair, type, new.rate, new.amount))
                             }
                         } else {
-                            updated.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(i, Depth(cur.rate))
-                            updated.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(i, Depth(new))
+                            updList.add(Update(pair, type, new.rate))
+                            updList.add(Update(pair, type, new.rate, new.amount))
                         }
                     }
                 }
             }
         }
     }
-    return updated.takeIf { it.isEmpty() }?.let { updated }
+    return updList.takeIf { it.isNotEmpty() }?.let { updList }
 }
 
 //    fun GetUpdated(curState: DepthBook, newState: DepthBook, updated: DepthBook, depthLimit: Int): DepthBook {

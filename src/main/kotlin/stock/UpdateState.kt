@@ -12,7 +12,7 @@ class UpdateState(val state_id: String, val url: Map<String, String>, val stock:
         stock.getDepth(url, state_id, stateNew)?.let {
             getUpdate(stateCur, it, state.depthLimit)?.let {
                 stateCur.replace(stateNew)
-                state.OnStateUpdate(it, null)
+                state.OnStateUpdate(it)
             }
         }
     }
