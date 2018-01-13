@@ -1,13 +1,8 @@
 package db
 
-import db.Pairs.autoIncrement
-import db.Pairs.primaryKey
-import db.Stock_Pair.autoIncrement
-import db.Stock_Pair.primaryKey
-import db.Wallet.references
-import org.jetbrains.exposed.dao.IntIdTable
 import org.jetbrains.exposed.sql.Table
 
+enum class BookType { asks, bids }
 enum class WalletType { AVAILABLE, LOCKED, TOTAL }
 enum class OrderStatus { ACTIVE, PARTIAL, COMPLETED, CANCELED, FAILED }
 enum class KeyType { WALLET, TRADE, ACTIVE, DEBUG, HISTORY, WITHDRAW }
@@ -27,18 +22,15 @@ object Stocks: Table() {
     val id = integer("id").autoIncrement().primaryKey()
     val name = varchar("name", 20)
     val history_last_id = long("history_last_id")
-
 }
 
 object Rates: Table() {
     val date = datetime("date")
     val stock_id = integer("stock_id") references Stocks.id
     val pair_id = integer("pair_id") references Pairs.id
-    val type = varchar("type", 4)
+    val type = enumeration("type", BookType::class.java)
     val rate = decimal("rate", 20, 8)
-    val amount = decimal("amount", 20, 8)
-    val depth = integer("depth")
-    init { uniqueIndex(stock_id, pair_id, type, depth) }
+    val amount = decimal("amount", 20, 8).nullable()
 }
 
 object Wallet: Table() {
@@ -64,12 +56,12 @@ object Stock_Currency: Table() {
     val id = integer("id").autoIncrement().primaryKey()
     val stock_id = integer("stock_id") references Stocks.id
     val currency_id = integer("currency_id") references  Currencies.id
-    val withdraw_min = decimal("withdraw_min", 20, 8).nullable()
-    val withdraw_percent = decimal("withdraw_percent", 20, 8).nullable()
-    val deposit_min = decimal("deposit_min", 20, 8).nullable()
-    val deposit_percent = decimal("deposit_percent", 20, 8).nullable()
-    val address = varchar("address", 256).nullable()
-    val tag = varchar("tag", 256).nullable()
+    val withdraw_min = decimal("withdraw_min", 20, 8)
+    val withdraw_percent = decimal("withdraw_percent", 20, 8)
+    val deposit_min = decimal("deposit_min", 20, 8)
+    val deposit_percent = decimal("deposit_percent", 20, 8)
+    val address = varchar("address", 256)
+    val tag = varchar("tag", 256)
     val enabled = bool("enabled")
 }
 

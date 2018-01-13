@@ -12,7 +12,7 @@ fun initDb() {
     Database.connect("jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE", driver = "org.h2.Driver")
 
     transaction {
-        create(Currencies, Pairs, Stocks, Stock_Pair, Stock_Currency, Api_Keys)
+        create(Currencies, Pairs, Stocks, Stock_Pair, Stock_Currency, Api_Keys, Wallet, Rates)
     }
 
     val wexId = initStock("WEX")
@@ -24,9 +24,10 @@ fun initDb() {
     initKey(wexId, "HJ0NLZF3-AGHB7T0Z-HJ9ZCO83-KB1CJ8YZ-NZVTVMQ6", "0d601ed39dfae1fa52dfbb2b03de0198487f66ba6e0d7692b824d906f995624a", KeyType.DEBUG)
     initKey(wexId, "VBXDPA22-NS5W3FAO-IFKAR8QC-SUT678LM-YT6UASLB", "1e44fab9661d2e7bf696e9eab841623195715ac8566924fad9054f17196afb60", KeyType.WITHDRAW)
 
+    val z = BigDecimal.ZERO
     listOf("usd", "btc", "ltc", "eth", "dsh").forEach {
         val curId = initCurrency(it, it != "usd")
-        initStockCurrency(wexId, curId)
+        initStockCurrency(wexId, curId, z, z, z, z, "", "")
     }
 
     listOf("btc_usd", "ltc_usd", "eth_usd", "dsh_usd").forEach {
@@ -78,9 +79,8 @@ fun initStockKey(stockId: Int, pairId: Int) = transaction {
     } get Stock_Pair.id
 }
 
-fun initStockCurrency(stockId: Int, curId: Int, withdrawMin: BigDecimal? = null, withdrawPercent: BigDecimal? = null,
-                      depositMin: BigDecimal? = null, depositPercent: BigDecimal? = null, address: String? = null,
-                      tag: String? = null) = transaction {
+fun initStockCurrency(stockId: Int, curId: Int, withdrawMin: BigDecimal, withdrawPercent: BigDecimal,
+                      depositMin: BigDecimal, depositPercent: BigDecimal, address: String, tag: String) = transaction {
     Stock_Currency.insert {
         it[stock_id] = stockId
         it[currency_id] = curId

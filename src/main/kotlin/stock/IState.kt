@@ -2,19 +2,14 @@ package stock
 
 import data.DepthBook
 import data.Order
-import db.KeyType
-import db.OrderStatus
-import db.PairInfo
-import db.StockKey
+import db.*
 import kotlinx.coroutines.experimental.Deferred
 import org.slf4j.Logger
 import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentMap
 
-enum class Book { asks, bids }
-
-data class Update(val pair:String, val type: Book, val rate: BigDecimal, val amount: BigDecimal? = null)
+data class Update(val pair:String, val type: BookType, val rate: BigDecimal, val amount: BigDecimal? = null)
 data class ApiRequest(val headers: Map<String, String>, val postData: String, val postReq: Map<String, String>)
 
 interface IState {
@@ -34,7 +29,7 @@ interface IState {
 
     var keys: MutableList<StockKey>
     var pairs: Map<String, PairInfo>
-    var currencies: Map<String, Pair<String,String>>
+    var currencies: Map<String, CurrencyInfo>
 
     val coroutines: MutableList<Deferred<Unit>>
     var lastHistoryId: Long

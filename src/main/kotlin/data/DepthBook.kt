@@ -1,16 +1,16 @@
 package data
 
-import stock.Book
+import db.BookType
 import java.math.BigDecimal
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
-class DepthBook() : LinkedHashMap<String, MutableMap<Book, MutableList<Depth>>>() {
+class DepthBook() : LinkedHashMap<String, MutableMap<BookType, MutableList<Depth>>>() {
     val pairCount = mutableMapOf<String, Long>()
 
     constructor(pair: String, depthLimit: Int = 0) : this() {
         pairCount.put(pair, 0)
-        arrayOf(Book.asks, Book.bids).forEach { type ->
+        arrayOf(BookType.asks, BookType.bids).forEach { type ->
             for (i in 0 until depthLimit) {
                 getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(Depth())
             }
@@ -30,7 +30,7 @@ class DepthBook() : LinkedHashMap<String, MutableMap<Book, MutableList<Depth>>>(
 //    constructor(pairs: Map<String, PairInfo>, depthLimit: Int = 0) : this() {
 //        pairs.forEach { val pair = it.key
 //            pairCount.put(pair, 0)
-//            arrayOf(stock.Book.asks, stock.Book.bids).forEach { type ->
+//            arrayOf(stock.BookType.asks, stock.BookType.bids).forEach { type ->
 //                for (i in 0 until depthLimit) {
 //                    getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(data.Depth())
 //                }
@@ -51,7 +51,7 @@ class DepthBook() : LinkedHashMap<String, MutableMap<Book, MutableList<Depth>>>(
     }
 
 
-    fun removeRate(pair: String, type: Book, rate: BigDecimal): String? {
+    fun removeRate(pair: String, type: BookType, rate: BigDecimal): String? {
         this[pair]?.get(type)?.let {
             if (it.size > 15) {
                 it.indexOfFirst { it.rate == rate }.let { index ->
@@ -70,15 +70,15 @@ class DepthBook() : LinkedHashMap<String, MutableMap<Book, MutableList<Depth>>>(
         return null
     }
 
-    fun updateRate(pair: String, type: Book, rate: BigDecimal, amount: BigDecimal): String? {
+    fun updateRate(pair: String, type: BookType, rate: BigDecimal, amount: BigDecimal): String? {
         this[pair]?.get(type)?.let {
             if (it.size > 15) {
                 var index = it.indexOfFirst { it.rate == rate }
                 when (index) {
                     -1  -> {
                         index = when (type) {
-                            Book.asks -> it.indexOfFirst { it.rate > rate }
-                            Book.bids -> it.indexOfFirst { it.rate < rate }
+                            BookType.asks -> it.indexOfFirst { it.rate > rate }
+                            BookType.bids -> it.indexOfFirst { it.rate < rate }
                         }
 
                         when (index) {

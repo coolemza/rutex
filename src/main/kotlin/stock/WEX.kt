@@ -3,6 +3,7 @@ package stock
 import data.Depth
 import data.DepthBook
 import data.Order
+import db.BookType
 import db.OrderStatus
 import db.PairInfo
 import db.StockKey
@@ -82,7 +83,7 @@ class WEX(override val state: IState) : IStock {
                 (it.value as Map<*, *>).forEach {
                     for (i in 0..(state.depthLimit - 1)) { //TODO: optimize (depthLimit - 1)
                         val value = ((it.value as List<*>)[i]) as List<*>
-                        update.getOrPut(pair_) { mutableMapOf() }.getOrPut(Book.valueOf(it.key.toString())) { mutableListOf() }
+                        update.getOrPut(pair_) { mutableMapOf() }.getOrPut(BookType.valueOf(it.key.toString())) { mutableListOf() }
                                 .add(i, Depth(value[0].toString(), value[1].toString()))
                     }
                 }

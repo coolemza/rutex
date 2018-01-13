@@ -53,6 +53,7 @@ class State(override val name: String): IState {
 
     override fun OnStateUpdate(update: List<Update>): Boolean {
         val time = LocalDateTime.now()
+        val dateTime = DateTime.now()
         stateTime = time
 
         update.forEach { upd ->
@@ -65,7 +66,7 @@ class State(override val name: String): IState {
                     .add(0, Depth(upd.rate, upd.amount ?: BigDecimal.ZERO))
         }
 
-        launch { saveBook(name, update) }
+        launch { saveBook(id, update, dateTime, pairs) }
 
         updated.clear()
         return true
@@ -84,6 +85,9 @@ class State(override val name: String): IState {
             val time = LocalDateTime.now().also { walletTime = it }
             val dateTime = DateTime.now()
 
+            mapOf(WalletType.AVAILABLE to available, WalletType.LOCKED to locked, WalletType.TOTAL to total).let {
+                launch { saveWallets(it, id, dateTime) }
+            }
 
             available.also { walletAvailable.putAll(it) }
             total.let { walletTotal.putAll(it) }
