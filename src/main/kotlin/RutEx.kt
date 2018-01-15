@@ -27,7 +27,7 @@ object RutEx {
 
     fun start() {
         val stocks = listOf("WEX")
-        this.stocks = stocks.map { it to Class.forName("stock.$it").kotlin.primaryConstructor?.call(State(it)) as IStock }.toMap()
+        this.stocks = stocks.map { it to Class.forName("stock.$it").kotlin.primaryConstructor?.call() as IStock }.toMap()
 
         this.stocks.forEach { it.value.start() }
 

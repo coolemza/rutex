@@ -58,7 +58,7 @@ fun initStock(name: String) = transaction {
 
 fun initPair(name: String) = transaction {
     Pairs.insert {
-        it[type] = "btc_usd"
+        it[type] = name
     } get Pairs.id
 }
 

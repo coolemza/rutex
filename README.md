@@ -1,2 +1,2 @@
 # rutex
-cryptocurrency exchange interface
+Kotlin cryptocurrency exchange interface

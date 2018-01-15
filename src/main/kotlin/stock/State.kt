@@ -20,44 +20,52 @@ import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
-class State(override val name: String): IState {
-    override var depthLimit = 5
-    override val log = getRollingLogger(name, Level.DEBUG)
+class State(val name: String) {
+    var depthLimit = 5
+    val log = getRollingLogger(name, Level.DEBUG)
 
-    override var id =  getStockId(name)
-    override var keys = getKeys(name)
-    override var pairs = getPairs(name)
-    override var currencies = getCurrencies(name)
-    override var activeList = mutableListOf<Order>()
-    override var debugWallet = ConcurrentHashMap<String, BigDecimal>()
+    var id =  getStockId(name)
+    var keys = getKeys(name)
+    var pairs = getPairs(name)
+    var currencies = getCurrencies(name)
 
-    override val coroutines = mutableListOf<Deferred<Unit>>()
+    val coroutines = mutableListOf<Deferred<Unit>>()
 
-    override var lastHistoryId = getLastHistoryId()
+    var lastHistoryId = getLastHistoryId()
 
-    override lateinit var stateTime: LocalDateTime
+    lateinit var stateTime: LocalDateTime
     lateinit var walletTime: LocalDateTime
     private var lastStateTime = LocalDateTime.now()
     val okHttp = OkHttpClient()
     val mediaType = MediaType.parse("application/x-www-form-urlencoded; charset=utf-8")!!
 
-    override val socketState = DepthBook()
-    override var updated = DepthBook()
-    override val wallet = mapOf<String, BigDecimal>()
+    val depthBook = DepthBook()
+    var updated = DepthBook()
+
+    val wallet = mapOf<String, BigDecimal>()
     val walletAvailable = mutableMapOf<String, BigDecimal>()
     val walletLocked = mutableMapOf<String, BigDecimal>()
     val walletTotal = mutableMapOf<String, BigDecimal>()
+    var debugWallet = ConcurrentHashMap<String, BigDecimal>()
 
-    override fun getLocked(orderList: MutableList<Order>) =  orderList.groupBy { it.getLockCur() }
+    var activeList = mutableListOf<Order>()
+
+    fun getWalletKey() = keys.find { it.type == KeyType.WALLET }!!
+    fun getActiveKey() = keys.find { it.type == KeyType.ACTIVE }!!
+    fun getWithdrawKey() = keys.find { it.type == KeyType.WITHDRAW }!!
+    fun getHistoryKey() = keys.find { it.type == KeyType.HISTORY }!!
+    fun getTradesKey() = keys.filter { it.type == KeyType.TRADE }
+
+    fun getLocked(orderList: MutableList<Order> = activeList) =  orderList.groupBy { it.getLockCur() }
             .map { it.key to it.value.sumByDecimal { it.getLockAmount() } }.toMap()
 
-    override fun OnStateUpdate(update: List<Update>): Boolean {
+    fun OnStateUpdate(update: List<Update>): Boolean {
         val time = LocalDateTime.now()
         val dateTime = DateTime.now()
         stateTime = time
 
         update.forEach { upd ->
-            val err = upd.amount?.let { socketState.updateRate(upd.pair, upd.type, upd.rate, it) } ?: socketState.removeRate(upd.pair, upd.type, upd.rate)
+            val err = upd.amount?.let { depthBook.updateRate(upd.pair, upd.type, upd.rate, it) } ?: depthBook.removeRate(upd.pair, upd.type, upd.rate)
             err?.let {
                 log.error(err)
                 return false
@@ -72,7 +80,7 @@ class State(override val name: String): IState {
         return true
     }
 
-    override fun onWalletUpdate(update: Map<String, BigDecimal>?, plus: Pair<String, BigDecimal>?, minus: Pair<String, BigDecimal>?) {
+    fun onWalletUpdate(update: Map<String, BigDecimal>? = null, plus: Pair<String, BigDecimal>? = null, minus: Pair<String, BigDecimal>? = null) {
             val total = mutableMapOf<String, BigDecimal>().apply { putAll(walletTotal) }
 
             update?.let { total.putAll(it) }
@@ -97,7 +105,7 @@ class State(override val name: String): IState {
             log.info("avaBOT: ${walletAvailable.toSortedMap()}")
     }
 
-    override fun onActive(deal_id: Long?, order_id: Long, amount: BigDecimal?, status: OrderStatus?, updateTotal: Boolean) {
+    fun onActive(deal_id: Long?, order_id: Long, amount: BigDecimal? = null, status: OrderStatus? = null, updateTotal: Boolean = true) {
         val order = activeList.find { if (deal_id != null) it.id == deal_id else it.order_id == order_id }
 
         if (order == null) {
@@ -150,7 +158,7 @@ class State(override val name: String): IState {
         }
     }
 
-    override fun SendRequest(urlParam: Map<String, String>, ap: ApiRequest?): String? {
+    fun SendRequest(urlParam: Map<String, String>, ap: ApiRequest? = null): String? {
         val begin = LocalDateTime.now()
         okHttp.newBuilder().connectTimeout(2000, TimeUnit.MILLISECONDS)
         try {
@@ -180,7 +188,7 @@ class State(override val name: String): IState {
         }
     }
 
-    override fun shutdown() {
+    fun shutdown() {
         log.info("waiting dispatcher..")
         okHttp.dispatcher().executorService().shutdown()
 

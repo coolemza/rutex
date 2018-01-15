@@ -6,12 +6,9 @@ import ch.qos.logback.classic.encoder.PatternLayoutEncoder
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.rolling.RollingFileAppender
 import ch.qos.logback.core.rolling.TimeBasedRollingPolicy
-import data.Depth
 import data.DepthBook
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import stock.IState
-import stock.IStock
 import stock.Update
 import java.math.BigDecimal
 
@@ -42,26 +39,6 @@ inline fun <T> Iterable<T>.sumByDecimal(selector: (T) -> BigDecimal): BigDecimal
     return sum
 }
 
-fun syncWallet(stock: IStock, state: IState, log:Logger) {
-    //TODO: synchronize wallet and History() on start
-
-    var walletSynchronized = false
-
-    do {
-        val beginWallet = stock.getBalance()
-        state.activeList.forEach { stock.getOrderInfo(it, false) }
-        state.lastHistoryId = stock.updateHistory(state.lastHistoryId)
-        val endWallet = stock.getBalance()
-        if (beginWallet != null && endWallet != null) {
-            if (beginWallet.all { it.value == endWallet[it.key]!! }) {
-                val locked = state.getLocked()
-                val total = endWallet.map { it.key to it.value + locked.getOrDefault(it.key, BigDecimal.ZERO) }.toMap()
-                state.onWalletUpdate(update = total)
-                walletSynchronized = true
-            }
-        }
-    } while (!walletSynchronized)
-}
 
 fun getUpdate(curState: DepthBook, newState: DepthBook, depthLimit: Int): List<Update>? {
     val updList = mutableListOf<Update>()

@@ -11,7 +11,6 @@ import kotlinx.coroutines.experimental.Deferred
 import org.apache.commons.codec.binary.Hex
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
-import utils.syncWallet
 import java.math.BigDecimal
 import java.net.URLEncoder
 import java.util.concurrent.Executors
@@ -19,7 +18,8 @@ import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-class WEX(override val state: IState) : IStock {
+class WEX() : IStock {
+    override val state = State(this::class.simpleName!!)
     private val coroutines = mutableListOf<Deferred<Unit>>()
 
     private val statePool = Executors.newScheduledThreadPool(1)
@@ -180,10 +180,10 @@ class WEX(override val state: IState) : IStock {
     }
 
     override fun start() {
-        syncWallet(this, state, state.log)
+        syncWallet()
         coroutines.addAll(listOf(Active(state.activeList),
                 history(state.lastHistoryId, 2, 1), info(this::info, 5, state.name, state.pairs), debugWallet(state.debugWallet)))
-        statePool.scheduleAtFixedRate(UpdateState("state", getDepthUrl(), this@WEX, state), 0, 1L, TimeUnit.NANOSECONDS)
+        statePool.scheduleAtFixedRate(UpdateState("state", getDepthUrl(), this), 0, 1L, TimeUnit.NANOSECONDS)
     }
 
     override fun stop() {

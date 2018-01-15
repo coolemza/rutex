@@ -15,10 +15,12 @@ import kotlin.concurrent.write
 
 enum class WithdrawStatus { SUCCESS, FAILED }
 
+data class Update(val pair:String, val type: BookType, val rate: BigDecimal, val amount: BigDecimal? = null)
+data class ApiRequest(val headers: Map<String, String>, val postData: String, val postReq: Map<String, String>)
 data class WithdrawResponse(val withdraw_id: Long, val status: WithdrawStatus)
 
 interface IStock {
-    val state: IState
+    val state: State
 
     fun getDepth(url: Map<String, String>, pair: String, updateTo: DepthBook? = null): DepthBook?
     fun getBalance(): Map<String, BigDecimal>?
@@ -75,5 +77,25 @@ interface IStock {
             }
             delay(delayMinutes, TimeUnit.MINUTES)
         }
+    }
+
+    fun syncWallet() {
+        //TODO: synchronize wallet and History() on start
+        var walletSynchronized = false
+
+        do {
+            val beginWallet = getBalance()
+            state.activeList.forEach { getOrderInfo(it, false) }
+            state.lastHistoryId = updateHistory(state.lastHistoryId)
+            val endWallet = getBalance()
+            if (beginWallet != null && endWallet != null) {
+                if (beginWallet.all { it.value == endWallet[it.key]!! }) {
+                    val locked = state.getLocked()
+                    val total = endWallet.map { it.key to it.value + locked.getOrDefault(it.key, BigDecimal.ZERO) }.toMap()
+                    state.onWalletUpdate(update = total)
+                    walletSynchronized = true
+                }
+            }
+        } while (!walletSynchronized)
     }
 }

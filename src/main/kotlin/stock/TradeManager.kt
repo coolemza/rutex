@@ -8,7 +8,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-class TradeManager(val state: IState) {
+class TradeManager(val state: State) {
     var tradePool = Executors.newFixedThreadPool(state.getTradesKey().size)
     val tradeLock = ReentrantLock()
 
