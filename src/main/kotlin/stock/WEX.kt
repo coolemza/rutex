@@ -30,11 +30,11 @@ class WEX() : IStock {
 
     fun getApi3Url(cmd: String) = mapOf("https://wex.nz/api/3/$cmd" to cmd)
 
-    fun getDepthUrl() = mapOf("https://wex.nz/api/3/depth/${state.pairs.keys.joinToString("-")}?limit=${state.depthLimit}" to "state")
+    fun getDepthUrl() = "https://wex.nz/api/3/depth/${state.pairs.keys.joinToString("-")}?limit=${state.depthLimit}"
 
     fun info(): Map<String, PairInfo>? {
         return getApi3Url("info").let {
-            ParseResponse(state.SendRequest(it))?.let {
+            ParseResponse(state.SendRequest(it.keys.first()))?.let {
                 (it["pairs"] as Map<*, *>).filter { state.pairs.containsKey(it.key.toString()) }.map {
                     it.key.toString() to PairInfo(state.pairs[it.key]!!.pairId, state.pairs[it.key]!!.stockPairId,
                             BigDecimal((it.value as Map<*, *>)["min_amount"].toString()))
@@ -47,7 +47,7 @@ class WEX() : IStock {
         var lastId = fromId
 
         getUrl("TransHistory").let {
-            ParseResponse(state.SendRequest(it, getApiRequest(state.getHistoryKey(), it, mapOf("order" to "DESC", "from_id" to fromId))))?.also {
+            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getHistoryKey(), it, mapOf("order" to "DESC", "from_id" to fromId))))?.also {
                 //TODO: int or Long? or String?
                 val res = (it["return"] as Map<String, *>).toSortedMap()
                 if (res.containsKey(fromId.toString())) {
@@ -75,9 +75,9 @@ class WEX() : IStock {
         return lastId
     }
 
-    override fun getDepth(url: Map<String, String>, pair: String, updateTo: DepthBook?): DepthBook? {
+    override fun getDepth(updateTo: DepthBook?, pair: String?): DepthBook? {
         val update = if (updateTo != null) updateTo else DepthBook()
-        ParseResponse(state.SendRequest(url))?.also {
+        ParseResponse(state.SendRequest(getDepthUrl()))?.also {
             (it as Map<*, *>).forEach {
                 val pair_ = it.key.toString()
                 (it.value as Map<*, *>).forEach {
@@ -93,7 +93,7 @@ class WEX() : IStock {
         return null
     }
 
-    override fun getApiRequest(key: StockKey, urlParam: Map<String, String>, data: Any?): ApiRequest {
+    fun getApiRequest(key: StockKey, urlParam: Map<String, String>, data: Any? = null): ApiRequest {
         val params = mutableMapOf("method" to urlParam.entries.first().value, "nonce" to "${++key.nonce}")
         data?.let { (it as Map<*, *>).forEach { params.put(it.key as String, "${it.value}") } }
 
@@ -109,7 +109,7 @@ class WEX() : IStock {
 
     override fun getOrderInfo(order: Order, updateTotal: Boolean) {
         getUrl("OrderInfo").let {
-            ParseResponse(state.SendRequest(it, getApiRequest(state.getActiveKey(), it, mapOf("order_id" to order.order_id))))?.also {
+            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getActiveKey(), it, mapOf("order_id" to order.order_id))))?.also {
                 //TODO: int or Long? or String?
                 val res = (it["return"] as Map<*, *>).values.first() as Map<*, *>
                 val partialAmount = BigDecimal(res["amount"].toString())
@@ -139,7 +139,7 @@ class WEX() : IStock {
         return null
     }
 
-    override fun putOrder(orders: List<Order>) {
+    override fun putOrders(orders: List<Order>) {
         tm.getKeys(orders).let {
             if (it != null) {
                 it.forEach {
@@ -152,13 +152,17 @@ class WEX() : IStock {
         }
     }
 
+    override fun cancelOrders(orders: List<Order>) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
     fun Trade(key: StockKey, orderList: List<Order>) {
         val order = orderList.first()
         val params = mapOf("pair" to order.pair, "type" to order.type, "rate" to order.rate.toString(), "amount" to order.amount.toString())
 
         state.log.info("send tp play ${params.entries.joinToString { "${it.key}:${it.value}" }}")
         getUrl("Trade").let {
-            ParseResponse(state.SendRequest(it, getApiRequest(key, it, params)))?.also {
+            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(key, it, params)))?.also {
                 val ret = (it["return"] as Map<*, *>)
 
                 state.log.info(" thread id: ${Thread.currentThread().id} trade ok: received: ${ret["received"]} remains: ${ret["remains"]} order_id: ${ret["order_id"]}")
@@ -181,9 +185,8 @@ class WEX() : IStock {
 
     override fun start() {
         syncWallet()
-        coroutines.addAll(listOf(Active(state.activeList),
-                history(state.lastHistoryId, 2, 1), info(this::info, 5, state.name, state.pairs), debugWallet(state.debugWallet)))
-        statePool.scheduleAtFixedRate(UpdateState("state", getDepthUrl(), this), 0, 1L, TimeUnit.NANOSECONDS)
+        coroutines.addAll(listOf(Active(state.activeList), depth(), history(state.lastHistoryId, 2, 1),
+                info(this::info, 5, state.name, state.pairs), debugWallet(state.debugWallet)))
     }
 
     override fun stop() {
@@ -194,7 +197,7 @@ class WEX() : IStock {
 
     override fun getBalance(): Map<String, BigDecimal>? {
         return getUrl("getInfo").let {
-            ParseResponse(state.SendRequest(it, getApiRequest(state.getWalletKey(), it)))?.let {
+            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it)))?.let {
                 ((it["return"] as Map<*, *>)["funds"] as Map<*, *>)
                         .filter { state.currencies.containsKey(it.key.toString()) }
                         .map { it.key.toString() to BigDecimal(it.value.toString()) }.toMap()
@@ -206,7 +209,7 @@ class WEX() : IStock {
         val data = mapOf("amount" to amount.toPlainString(), "coinName" to crossCur.toUpperCase(), "address" to address.first)
 
         return getUrl("WithdrawCoin").let {
-            ParseResponse(state.SendRequest(it, getApiRequest(state.getWithdrawKey(), it, data)))?.let {
+            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data)))?.let {
                 val res = it["return"] as Map<*, *>
                 if (it["success"] == 1L) {
                     return WithdrawResponse(res["tId"] as Long, WithdrawStatus.SUCCESS)

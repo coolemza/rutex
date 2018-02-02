@@ -24,7 +24,7 @@ class State(val name: String) {
     var depthLimit = 5
     val log = getRollingLogger(name, Level.DEBUG)
 
-    var id =  getStockId(name)
+    var id = getStockId(name)
     var keys = getKeys(name)
     var pairs = getPairs(name)
     var currencies = getCurrencies(name)
@@ -158,11 +158,11 @@ class State(val name: String) {
         }
     }
 
-    fun SendRequest(urlParam: Map<String, String>, ap: ApiRequest? = null): String? {
+    fun SendRequest(url: String, ap: ApiRequest? = null): String? {
         val begin = LocalDateTime.now()
         okHttp.newBuilder().connectTimeout(2000, TimeUnit.MILLISECONDS)
         try {
-            val request = Request.Builder().url(urlParam.entries.first().key).apply {
+            val request = Request.Builder().url(url).apply {
                 ap?.run { headers(Headers.of(ap.headers)).post(RequestBody.create(mediaType, ap.postData.toByteArray())) }
             }
 
@@ -180,7 +180,7 @@ class State(val name: String) {
             return null
         } catch (e: SocketTimeoutException) {
             log.warn(e.message)
-            log.warn(" ${urlParam.entries.first().key}")
+            log.warn(" $url")
             return null
         } catch (e: IOException) {
             log.error(e.message)

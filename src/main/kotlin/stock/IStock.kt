@@ -7,6 +7,7 @@ import kotlinx.coroutines.experimental.NonCancellable
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.newSingleThreadContext
+import utils.getUpdate
 import java.math.BigDecimal
 import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.TimeUnit
@@ -22,11 +23,11 @@ data class WithdrawResponse(val withdraw_id: Long, val status: WithdrawStatus)
 interface IStock {
     val state: State
 
-    fun getDepth(url: Map<String, String>, pair: String, updateTo: DepthBook? = null): DepthBook?
+    fun getDepth(updateTo: DepthBook? = null, pair: String? = null): DepthBook?
     fun getBalance(): Map<String, BigDecimal>?
-    fun getApiRequest(key: StockKey, urlParam: Map<String, String>, data: Any? = null): ApiRequest
     fun getOrderInfo(order: Order, updateTotal: Boolean = true)
-    fun putOrder(orders: List<Order>)
+    fun putOrders(orders: List<Order>)
+    fun cancelOrders(orders: List<Order>)
     fun start()
     fun stop()
     fun updateHistory(fromId: Long): Long
@@ -38,6 +39,21 @@ interface IStock {
                 getBalance()?.let { debugWallet.putAll(it) }
             }
             delay(10, TimeUnit.SECONDS)
+        }
+    }
+
+    fun depth() = async(newSingleThreadContext("Depth")) {
+        val stateNew = DepthBook()
+        val stateCur = DepthBook()
+        while (isActive) {
+            stateNew.clear()
+            getDepth(stateNew)?.let {
+                getUpdate(stateCur, it, state.depthLimit)?.let {
+                    stateCur.replace(stateNew)
+                    state.OnStateUpdate(it)
+                }
+            }
+            delay(100)
         }
     }
 
