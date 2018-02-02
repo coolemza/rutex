@@ -1,8 +1,8 @@
 package stock
 
 import data.Order
-import db.OrderStatus
-import db.StockKey
+import database.OrderStatus
+import database.StockKey
 import java.math.BigDecimal
 import java.util.concurrent.Executors
 import java.util.concurrent.locks.ReentrantLock

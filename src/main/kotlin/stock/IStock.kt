@@ -2,7 +2,7 @@ package stock
 
 import data.DepthBook
 import data.Order
-import db.*
+import database.*
 import kotlinx.coroutines.experimental.NonCancellable
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.delay
@@ -72,20 +72,20 @@ interface IStock {
         while (isActive) {
             kotlinx.coroutines.experimental.run(NonCancellable) {
                 updateHistory(historyLastId).takeIf { it > historyLastId }
-                        ?.also { saveHistoryId(it, stockId) }?.also { historyLastId = it }
+                        ?.also { state.db.saveHistoryId(it, stockId) }?.also { historyLastId = it }
             }
             delay(delaySeconds, TimeUnit.SECONDS)
         }
     }
 
     fun info(func: () -> Map<String, PairInfo>?, delayMinutes: Long, stockName: String, pairs: Map< String, PairInfo>) = async(newSingleThreadContext("info")) {
-        val lastPair = getPairs(stockName)
+        val lastPair = state.db.getStockPairs(stockName)
         while (isActive) {
             kotlinx.coroutines.experimental.run(NonCancellable) {
                 func()?.let {
                     val newList = it.filter { it.value.minAmount.compareTo(lastPair[it.key]!!.minAmount) != 0 }
                     if (newList.isNotEmpty()) {
-                        updatePairs(newList, stockName)
+                        state.db.updateStockPairs(newList, stockName)
                         newList.forEach { lastPair[it.key]!!.minAmount = it.value.minAmount }
                         RutEx.stateLock.write { newList.forEach { pairs[it.key]!!.minAmount = it.value.minAmount } }
                     }

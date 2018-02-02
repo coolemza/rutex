@@ -1,8 +1,7 @@
-import db.initDb
+import database.initDb
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.runBlocking
 import stock.IStock
-import stock.State
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.reflect.full.primaryConstructor
 

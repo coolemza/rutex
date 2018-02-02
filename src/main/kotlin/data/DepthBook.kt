@@ -1,6 +1,6 @@
 package data
 
-import db.BookType
+import database.BookType
 import java.math.BigDecimal
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap

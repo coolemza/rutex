@@ -4,7 +4,7 @@ import ch.qos.logback.classic.Level
 import data.Depth
 import data.DepthBook
 import data.Order
-import db.*
+import database.*
 import kotlinx.coroutines.experimental.Deferred
 import kotlinx.coroutines.experimental.cancelAndJoin
 import kotlinx.coroutines.experimental.launch
@@ -20,18 +20,21 @@ import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
-class State(val name: String) {
+class State(val name: String, val db: IDb) {
     var depthLimit = 5
     val log = getRollingLogger(name, Level.DEBUG)
 
-    var id = getStockId(name)
-    var keys = getKeys(name)
-    var pairs = getPairs(name)
-    var currencies = getCurrencies(name)
+
+
+    val info = db.getStockInfo(name)
+    val id = info.id
+    val keys = db.getKeys(name)
+    val pairs = db.getStockPairs(name)
+    val currencies = db.getStockCurrencies(name) //RutBot.rutdb.GetCurrencies(id)
 
     val coroutines = mutableListOf<Deferred<Unit>>()
 
-    var lastHistoryId = getLastHistoryId()
+    var lastHistoryId = info.historyId
 
     lateinit var stateTime: LocalDateTime
     lateinit var walletTime: LocalDateTime
@@ -61,7 +64,6 @@ class State(val name: String) {
 
     fun OnStateUpdate(update: List<Update>): Boolean {
         val time = LocalDateTime.now()
-        val dateTime = DateTime.now()
         stateTime = time
 
         update.forEach { upd ->
@@ -74,7 +76,7 @@ class State(val name: String) {
                     .add(0, Depth(upd.rate, upd.amount ?: BigDecimal.ZERO))
         }
 
-        launch { saveBook(id, update, dateTime, pairs) }
+        launch { db.saveBook(id, update, time, pairs) }
 
         updated.clear()
         return true
@@ -91,10 +93,9 @@ class State(val name: String) {
             val available = total.entries.associateBy({ it.key }) { it.value - locked.getOrDefault(it.key, BigDecimal.ZERO) }
 
             val time = LocalDateTime.now().also { walletTime = it }
-            val dateTime = DateTime.now()
 
             mapOf(WalletType.AVAILABLE to available, WalletType.LOCKED to locked, WalletType.TOTAL to total).let {
-                launch { saveWallets(it, id, dateTime) }
+                launch { db.saveWallets(it, id, time) }
             }
 
             available.also { walletAvailable.putAll(it) }
@@ -209,6 +210,6 @@ class State(val name: String) {
         }
 
         log.info("saving all nonce's")
-        keys.forEach { saveNonce(it) }
+        keys.forEach { db.saveNonce(it) }
     }
 }

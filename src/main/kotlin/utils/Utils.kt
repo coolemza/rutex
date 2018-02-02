@@ -11,6 +11,8 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import stock.Update
 import java.math.BigDecimal
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 fun getRollingLogger(name: String, logLevel: Level): Logger {
     val ctx = LoggerFactory.getILoggerFactory() as LoggerContext
@@ -74,35 +76,14 @@ fun getUpdate(curState: DepthBook, newState: DepthBook, depthLimit: Int): List<U
     return updList.takeIf { it.isNotEmpty() }?.let { updList }
 }
 
-//    fun GetUpdated(curState: DepthBook, newState: DepthBook, updated: DepthBook, depthLimit: Int): DepthBook {
-//        updated.clear()
-//        newState.forEach { pair, p ->
-//            p.forEach {
-//                val type = it.key
-//                val newDepthLimit = Math.min(it.value.size, depthLimit)
-//                for (i in 0 until newDepthLimit) {
-//                    if (null != curState[pair]?.get(type)?.get(i)) {
-//                        if (null != newState[pair]?.get(type)?.get(i)) {
-//                            val newDepth = newState[pair]?.get(type)?.get(i)
-//                            val curDepth = curState[pair]?.get(type)?.get(i)
-//                            if (curDepth?.rate != newDepth?.rate || curDepth?.amount != newDepth?.amount) {
-//                                updated.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableMapOf() }.put(i, Depth(newDepth!!))
-//                                curDepth?.replace(newDepth)
-//                            }
-//                        }  else {
-//                            curState[pair]?.get(type)?.removeAt(i)
-//                            newState[pair]?.get(type)?.forEach {
-//                                updated.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableMapOf() }.put(i, Depth(it))
-//                            }
-//                        }
-//                    } else {
-//                        newState[pair]?.get(type)?.get(i)?.let {
-//                            updated.getOrPut(pair) { LinkedHashMap() }.getOrPut(type) { mutableMapOf() }.put(i, Depth(it))
-//                            curState[pair]?.get(type)?.set(i, Depth(it))
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//        return updated
-//    }
+fun local2joda(time: LocalDateTime): org.joda.time.LocalDateTime {
+//    val time = java.time.LocalDateTime.now()
+
+// Separate steps, showing intermediate types
+    val java8ZonedDateTime = time.atZone(ZoneId.systemDefault())
+    val java8Instant = java8ZonedDateTime.toInstant()
+    val millis = java8Instant.toEpochMilli()
+    val jodaLocalDateTime = org.joda.time.LocalDateTime(millis);
+
+    return jodaLocalDateTime
+}

@@ -41,6 +41,7 @@ dependencies {
 
     compile 'org.jetbrains.exposed:exposed:0.9.1'
     compile 'com.h2database:h2:1.4.196'
+    testCompile 'org.amshove.kluent:kluent:1.34'
 }
 
 
