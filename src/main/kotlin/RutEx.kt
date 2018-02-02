@@ -1,4 +1,4 @@
-import database.initDb
+import database.Db
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.runBlocking
 import stock.IStock
@@ -14,8 +14,6 @@ object RutEx {
     @JvmStatic
     fun main(args: Array<String>) {
         try {
-            initDb()
-
             Runtime.getRuntime().addShutdownHook(Thread { RutEx.stop() })
 
             start()
@@ -26,7 +24,7 @@ object RutEx {
 
     fun start() {
         val stocks = listOf("WEX")
-        this.stocks = stocks.map { it to Class.forName("stock.$it").kotlin.primaryConstructor?.call() as IStock }.toMap()
+        this.stocks = stocks.map { it to Class.forName("stock.$it").kotlin.primaryConstructor?.call(Db()) as IStock }.toMap()
 
         this.stocks.forEach { it.value.start() }
 
