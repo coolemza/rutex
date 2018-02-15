@@ -9,25 +9,18 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
-open class Db : IDb {
-    init {
-        initDb()
-    }
+open class Db(url: String = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
+                 driver: String = "org.h2.Driver", user: String = "", password: String = "") : IDb {
+    val db = Database.connect(url, driver, user, password)
 
-    val pairs = transaction { Pairs.selectAll().associateBy({ it[Pairs.type] }) { it[Pairs.id] } }
-    val stocks = transaction {
+    val pairs: Map<String, Int> by lazy { transaction { Pairs.selectAll().associateBy({ it[Pairs.type] }) { it[Pairs.id] } } }
+    val stocks: Map<String, StockInfo> by lazy {transaction {
         Stocks.selectAll().associateBy({ it[Stocks.name] }) { StockInfo(it[Stocks.id], it[Stocks.history_last_id]) }
-    }
-    val currencies = transaction {
+    } }
+    val currenciesCache: Map<String, CurrencyInfo> by lazy { transaction {
         Currencies.selectAll().associateBy({ it[Currencies.type] })
         { CurrencyInfo(it[Currencies.id], it[Currencies.type], it[Currencies.crypto]) }
-    }
-
-    override fun initDb() {
-        Database.connect("jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE", driver = "org.h2.Driver")
-
-        transaction { SchemaUtils.create(Rates, Wallet) } //TODO: createMissingTablesAndColumns()
-    }
+    } }
 
     override fun getKeys(name: String): MutableList<StockKey> {
         val keys = mutableListOf<StockKey>()

@@ -11,8 +11,6 @@ data class CurrencyInfo(val id: Int, val name: String, val crypto: Boolean)
 data class StockCurrencyInfo(val curId: Int)
 
 interface IDb {
-    fun initDb()
-
     fun getStockInfo(name: String): StockInfo
     fun getKeys(name: String): MutableList<StockKey>
     fun getStockPairs(name: String): Map<String, PairInfo>
