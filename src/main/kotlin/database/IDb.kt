@@ -22,4 +22,6 @@ interface IDb {
     fun saveHistoryId(id: Long, stock_id: Int)
 
     fun updateStockPairs(update: Map<String, PairInfo>, stockName: String)
+    fun initStockPair(stockId: Int, pairId: Int, percent: BigDecimal, minAmount: BigDecimal)
+    fun initKey(stockId: Int, apiKey: String, secretPart: String, keyType: KeyType)
 }

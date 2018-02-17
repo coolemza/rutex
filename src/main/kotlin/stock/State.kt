@@ -1,6 +1,9 @@
 package stock
 
 import ch.qos.logback.classic.Level
+import com.github.salomonbrys.kodein.Kodein
+import com.github.salomonbrys.kodein.KodeinAware
+import com.github.salomonbrys.kodein.instance
 import data.Depth
 import data.DepthBook
 import data.Order
@@ -20,11 +23,11 @@ import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
-class State(val name: String, val db: IDb) {
+class State(val name: String, override val kodein: Kodein): KodeinAware {
+    val db: IDb = instance()
+
     var depthLimit = 5
     val log = getRollingLogger(name, Level.DEBUG)
-
-
 
     val info = db.getStockInfo(name)
     val id = info.id

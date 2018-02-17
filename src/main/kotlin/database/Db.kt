@@ -13,11 +13,33 @@ open class Db(url: String = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CL
                  driver: String = "org.h2.Driver", user: String = "", password: String = "") : IDb {
     val db = Database.connect(url, driver, user, password)
 
+    init {
+        transaction {
+            SchemaUtils.create(Currencies, Pairs, Stocks, Stock_Pair, Stock_Currency, Api_Keys, Wallet, Rates)
+        }
+
+        val stocks = RutData.getStocks().associateBy({ it }) { initStock(it) }
+
+        val currencies = RutData.getCurrencies().associateBy({ it }) {
+            initCurrency(it, it != "usd" && it != "eur" && it != "rur")
+        }
+        val pairs = RutData.getPairs().associateBy({ it }) { initPair(it) }
+
+        stocks.forEach { _, stockId ->
+            currencies.forEach { cur, curId ->
+                initStockCurrency(stockId, curId, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, "", "")
+            }
+            pairs.forEach { _, pairId ->
+                initStockPair(stockId, pairId, BigDecimal("0.002"), BigDecimal("0.001"))
+            }
+        }
+    }
+
     val pairs: Map<String, Int> by lazy { transaction { Pairs.selectAll().associateBy({ it[Pairs.type] }) { it[Pairs.id] } } }
     val stocks: Map<String, StockInfo> by lazy {transaction {
         Stocks.selectAll().associateBy({ it[Stocks.name] }) { StockInfo(it[Stocks.id], it[Stocks.history_last_id]) }
     } }
-    val currenciesCache: Map<String, CurrencyInfo> by lazy { transaction {
+    val currencies: Map<String, CurrencyInfo> by lazy { transaction {
         Currencies.selectAll().associateBy({ it[Currencies.type] })
         { CurrencyInfo(it[Currencies.id], it[Currencies.type], it[Currencies.crypto]) }
     } }
@@ -104,7 +126,7 @@ open class Db(url: String = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CL
         }
     }
 
-    fun initKey(stockId: Int, apiKey: String, secretPart: String, keyType: KeyType) {
+    override fun initKey(stockId: Int, apiKey: String, secretPart: String, keyType: KeyType) {
         transaction {
             Api_Keys.insert {
                 it[stock_id] = stockId
@@ -128,6 +150,18 @@ open class Db(url: String = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CL
         Pairs.insert {
             it[type] = name
         } get Pairs.id
+    }
+
+    override fun initStockPair(stockId: Int, pairId: Int, percent: BigDecimal, minAmount: BigDecimal) {
+        transaction {
+            Stock_Pair.insertIgnore {
+                it[stock_id] = stockId
+                it[pair_id] = pairId
+                it[enabled] = true
+                it[Stock_Pair.percent] = percent
+                it[Stock_Pair.minAmount] = minAmount
+            }
+        }
     }
 
     fun initCurrency(name: String, crypto: Boolean) = transaction {

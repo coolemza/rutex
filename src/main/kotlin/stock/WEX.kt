@@ -1,5 +1,7 @@
 package stock
 
+import com.github.salomonbrys.kodein.Kodein
+import com.github.salomonbrys.kodein.KodeinAware
 import data.Depth
 import data.DepthBook
 import data.Order
@@ -14,8 +16,8 @@ import java.util.concurrent.Executors
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-class WEX(db: IDb) : IStock {
-    override val state = State(this::class.simpleName!!, db)
+class WEX(override val kodein: Kodein) : IStock, KodeinAware {
+    override val state = State(this::class.simpleName!!, kodein)
     private val coroutines = mutableListOf<Deferred<Unit>>()
 
     private val statePool = Executors.newScheduledThreadPool(1)

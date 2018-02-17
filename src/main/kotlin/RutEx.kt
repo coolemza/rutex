@@ -1,7 +1,12 @@
+import com.github.salomonbrys.kodein.*
 import database.Db
+import database.IDb
+import database.KeyType
+import database.RutData
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.runBlocking
 import stock.IStock
+import stock.WEX
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.reflect.full.primaryConstructor
 
@@ -10,6 +15,20 @@ object RutEx {
     lateinit var stocks: Map<String, IStock>
 
     private var stop = false
+
+    private val kodein = Kodein {
+        bind<IDb>() with singleton { Db() }
+        constant("testKeys") with RutData.getTestKeys()
+    }
+
+    init {
+        val db: IDb = kodein.instance()
+        val testKeys: Map<String, List<Triple<String, String, KeyType>>> = kodein.instance("testKeys")
+        testKeys.forEach {
+            val stockId = db.getStockInfo(it.key).id
+            it.value.forEach { db.initKey(stockId, it.first, it.second, it.third) }
+        }
+    }
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -23,8 +42,9 @@ object RutEx {
     }
 
     fun start() {
-        val stocks = listOf("WEX")
-        this.stocks = stocks.map { it to Class.forName("stock.$it").kotlin.primaryConstructor?.call(Db()) as IStock }.toMap()
+        this.stocks = RutData.getStocks().map {
+            it to Class.forName("stock.$it").kotlin.primaryConstructor?.call(kodein) as IStock
+        }.toMap()
 
         this.stocks.forEach { it.value.start() }
 
