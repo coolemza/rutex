@@ -203,18 +203,18 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         }
     }
 
-    override fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): WithdrawResponse {
+    override fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): Pair<Long, WithdrawStatus> {
         val data = mapOf("amount" to amount.toPlainString(), "coinName" to crossCur.toUpperCase(), "address" to address.first)
 
         return getUrl("WithdrawCoin").let {
             ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data)))?.let {
                 val res = it["return"] as Map<*, *>
                 if (it["success"] == 1L) {
-                    return WithdrawResponse(res["tId"] as Long, WithdrawStatus.SUCCESS)
+                    return Pair(res["tId"] as Long, WithdrawStatus.SUCCESS)
                 } else {
-                    return WithdrawResponse(0L, WithdrawStatus.FAILED)
+                    return Pair(0L, WithdrawStatus.FAILED)
                 }
-            } ?: return WithdrawResponse(0L, WithdrawStatus.FAILED)
+            } ?: return Pair(0L, WithdrawStatus.FAILED)
         }
     }
 }

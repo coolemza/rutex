@@ -18,6 +18,7 @@ enum class WithdrawStatus { SUCCESS, FAILED }
 
 data class Update(val pair:String, val type: BookType, val rate: BigDecimal, val amount: BigDecimal? = null)
 data class ApiRequest(val headers: Map<String, String>, val postData: String, val postReq: Map<String, String>)
+//data class WithdrawRequest(val address: String,)
 data class WithdrawResponse(val withdraw_id: Long, val status: WithdrawStatus)
 
 interface IStock {
@@ -31,7 +32,7 @@ interface IStock {
     fun start()
     fun stop()
     fun updateHistory(fromId: Long): Long
-    fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): WithdrawResponse
+    fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): Pair<Long, WithdrawStatus>
 
     fun debugWallet(debugWallet: ConcurrentMap<String, BigDecimal>) = async(newSingleThreadContext("stockWallet")) {
         while (isActive) {
