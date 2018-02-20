@@ -6,6 +6,7 @@ import database.RutData
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.runBlocking
 import stock.IStock
+import stock.Kraken
 import stock.WEX
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.reflect.full.primaryConstructor
@@ -33,9 +34,17 @@ object RutEx {
     @JvmStatic
     fun main(args: Array<String>) {
         try {
-            Runtime.getRuntime().addShutdownHook(Thread { RutEx.stop() })
+            //Runtime.getRuntime().addShutdownHook(Thread { RutEx.stop() })
 
-            start()
+            //start()
+
+            val theWex = WEX(kodein)
+            val some = theWex.getBalance()
+
+            val theKraken = Kraken(kodein)
+            val some2 = theKraken.getBalance()
+
+            some2
         } catch (e: Exception) {
             e.printStackTrace()
         }

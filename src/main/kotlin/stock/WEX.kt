@@ -193,7 +193,27 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         state.shutdown()
     }
 
+/*    override fun getBalance(): Map<String, BigDecimal>? {
+        return getUrl("getInfo").let {
+            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it)))?.let {
+                ((it["return"] as Map<*, *>)["funds"] as Map<*, *>)
+                        .filter { state.currencies.containsKey(it.key.toString()) }
+                        .map { it.key.toString() to BigDecimal(it.value.toString()) }.toMap()
+            }
+        }
+    }*/
+
     override fun getBalance(): Map<String, BigDecimal>? {
+        val some = getUrl("getInfo").let {
+            val some2 = it.keys.first()
+            val some3 = it
+            val some4 = state.getWalletKey()
+
+            val response = ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it)))
+            response
+        }
+
+
         return getUrl("getInfo").let {
             ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it)))?.let {
                 ((it["return"] as Map<*, *>)["funds"] as Map<*, *>)
