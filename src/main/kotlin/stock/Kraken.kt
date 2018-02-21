@@ -17,6 +17,8 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
+    //override val state = State(this::class.simpleName!!, kodein)
+
     override fun cancelOrders(orders: List<Order>) {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
@@ -33,6 +35,21 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
+    /*override fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): Pair<Long, WithdrawStatus> {
+        val data = mapOf("amount" to amount.toPlainString(), "coinName" to crossCur.toUpperCase(), "address" to address.first)
+
+        return getUrl("WithdrawCoin").let {
+            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data)))?.let {
+                val res = it["return"] as Map<*, *>
+                if (it["success"] == 1L) {
+                    return Pair(res["tId"] as Long, WithdrawStatus.SUCCESS)
+                } else {
+                    return Pair(0L, WithdrawStatus.FAILED)
+                }
+            } ?: return Pair(0L, WithdrawStatus.FAILED)
+        }
+    }*/
+
     override val state = State(this::class.simpleName!!, kodein)
     override fun updateHistory(fromId: Long): Long {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
@@ -45,6 +62,10 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     }
 
     override fun getBalance(): Map<String, BigDecimal>? {
+        val some =  getUrl("Balance").let {state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it))};
+        some
+
+
         return getUrl("Balance").let {
             state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it))?.let {
                 (it as List<*>)
