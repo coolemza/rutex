@@ -30,7 +30,7 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
         val pairs = RutData.getPairs().associateBy({ it }) { initPair(it) }
 
         stocks.forEach { _, stockId ->
-            currencies.forEach { cur, curId ->
+            currencies.forEach { _, curId ->
                 initStockCurrency(stockId, curId, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, "", "")
             }
             pairs.forEach { _, pairId ->
@@ -178,16 +178,6 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
             it[type] = name
             it[Currencies.crypto] = crypto
         } get Currencies.id
-    }
-
-    fun initStockKey(stockId: Int, pairId: Int) = transaction {
-        Stock_Pair.insert {
-            it[stock_id] = stockId
-            it[pair_id] = pairId
-            it[enabled] = true
-            it[minAmount] = BigDecimal.ONE
-            it[percent] = BigDecimal.TEN
-        } get Stock_Pair.id
     }
 
     fun initStockCurrency(stockId: Int, curId: Int, withdrawMin: BigDecimal, withdrawPercent: BigDecimal,

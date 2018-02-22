@@ -7,13 +7,15 @@ import com.github.salomonbrys.kodein.instance
 import data.Depth
 import data.DepthBook
 import data.Order
-import database.*
+import database.IDb
+import database.KeyType
+import database.OrderStatus
+import database.WalletType
 import kotlinx.coroutines.experimental.Deferred
 import kotlinx.coroutines.experimental.cancelAndJoin
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 import okhttp3.*
-import org.joda.time.DateTime
 import utils.getRollingLogger
 import utils.sumByDecimal
 import java.io.IOException
@@ -41,9 +43,8 @@ class State(val name: String, override val kodein: Kodein): KodeinAware {
 
     lateinit var stateTime: LocalDateTime
     lateinit var walletTime: LocalDateTime
-    private var lastStateTime = LocalDateTime.now()
     val okHttp = OkHttpClient()
-    val mediaType = MediaType.parse("application/x-www-form-urlencoded; charset=utf-8")!!
+    private val mediaType = MediaType.parse("application/x-www-form-urlencoded; charset=utf-8")!!
 
     val depthBook = DepthBook()
     var updated = DepthBook()
@@ -157,13 +158,10 @@ class State(val name: String, override val kodein: Kodein): KodeinAware {
                 }
 
             }
-            else -> {
-            }
         }
     }
 
     fun SendRequest(url: String, ap: ApiRequest? = null): String? {
-        val begin = LocalDateTime.now()
         okHttp.newBuilder().connectTimeout(2000, TimeUnit.MILLISECONDS)
         try {
             val request = Request.Builder().url(url).apply {
@@ -171,14 +169,7 @@ class State(val name: String, override val kodein: Kodein): KodeinAware {
             }
 
             val response = okHttp.newCall(request.build()).execute()
-            response.body()?.string()?.let {
-                try {
-                    return it
-                } catch (e: Exception) {
-                    log.error("response parsing error: $it")
-                    return null
-                }
-            }
+            response.body()?.string()?.let { return it }
 
             log.error("null body received")
             return null

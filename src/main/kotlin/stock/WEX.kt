@@ -182,7 +182,7 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
 
     override fun start() {
         syncWallet()
-        coroutines.addAll(listOf(Active(state.activeList), depth(), history(state.lastHistoryId, 2, 1),
+        coroutines.addAll(listOf(active(state.activeList), depth(), history(state.lastHistoryId, 2, 1),
                 info(this::info, 5, state.name, state.pairs), debugWallet(state.debugWallet)))
     }
 

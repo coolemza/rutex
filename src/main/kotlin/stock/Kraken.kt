@@ -4,7 +4,6 @@ import com.github.salomonbrys.kodein.Kodein
 import com.github.salomonbrys.kodein.KodeinAware
 import data.DepthBook
 import data.Order
-import database.StockCurrencyInfo
 import database.StockKey
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
