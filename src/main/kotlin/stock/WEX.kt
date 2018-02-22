@@ -22,7 +22,6 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
 
     private val statePool = Executors.newScheduledThreadPool(1)
     private var tm = TradeManager(state)
-//    private val util = StockUtil(this, state, state.log)
 
     fun getUrl(cmd: String) = mapOf("https://wex.nz/tapi/" to cmd)
 

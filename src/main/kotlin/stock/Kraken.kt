@@ -34,6 +34,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     }
 
     override val state = State(this::class.simpleName!!, kodein)
+
     override fun updateHistory(fromId: Long): Long {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }

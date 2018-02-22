@@ -1,5 +1,8 @@
 package database
 
+import com.github.salomonbrys.kodein.Kodein
+import com.github.salomonbrys.kodein.KodeinAware
+import com.github.salomonbrys.kodein.instance
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import stock.Update
@@ -9,9 +12,10 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
-open class Db(url: String = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
-                 driver: String = "org.h2.Driver", user: String = "", password: String = "") : IDb {
-    val db = Database.connect(url, driver, user, password)
+class Db(override val kodein: Kodein) : IDb, KodeinAware {
+    val db = kodein.run {
+        Database.connect(instance(Params.dbUrl), instance(Params.dbDriver), instance(Params.dbUser), instance(Params.dbPassword))
+    }
 
     init {
         transaction {
@@ -32,6 +36,11 @@ open class Db(url: String = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CL
             pairs.forEach { _, pairId ->
                 initStockPair(stockId, pairId, BigDecimal("0.002"), BigDecimal("0.001"))
             }
+        }
+
+        kodein.instance<RutKeys>(Params.testKeys).keys.forEach {
+            val stockId = stocks[it.key]!!
+            it.value.forEach { initKey(stockId, it.key, it.secret, it.type) }
         }
     }
 
