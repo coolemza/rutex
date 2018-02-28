@@ -1,5 +1,8 @@
 package database
 
+import com.github.salomonbrys.kodein.Kodein
+import com.github.salomonbrys.kodein.KodeinAware
+import com.github.salomonbrys.kodein.instance
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import stock.Update
@@ -9,9 +12,10 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
-open class Db(url: String = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
-                 driver: String = "org.h2.Driver", user: String = "", password: String = "") : IDb {
-    val db = Database.connect(url, driver, user, password)
+class Db(override val kodein: Kodein) : IDb, KodeinAware {
+    val db = kodein.run {
+        Database.connect(instance(Params.dbUrl), instance(Params.dbDriver), instance(Params.dbUser), instance(Params.dbPassword))
+    }
 
     init {
         transaction {
@@ -26,12 +30,17 @@ open class Db(url: String = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CL
         val pairs = RutData.getPairs().associateBy({ it }) { initPair(it) }
 
         stocks.forEach { _, stockId ->
-            currencies.forEach { cur, curId ->
+            currencies.forEach { _, curId ->
                 initStockCurrency(stockId, curId, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, "", "")
             }
             pairs.forEach { _, pairId ->
                 initStockPair(stockId, pairId, BigDecimal("0.002"), BigDecimal("0.001"))
             }
+        }
+
+        kodein.instance<RutKeys>(Params.testKeys).keys.forEach {
+            val stockId = stocks[it.key]!!
+            it.value.forEach { initKey(stockId, it.key, it.secret, it.type) }
         }
     }
 
@@ -169,16 +178,6 @@ open class Db(url: String = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CL
             it[type] = name
             it[Currencies.crypto] = crypto
         } get Currencies.id
-    }
-
-    fun initStockKey(stockId: Int, pairId: Int) = transaction {
-        Stock_Pair.insert {
-            it[stock_id] = stockId
-            it[pair_id] = pairId
-            it[enabled] = true
-            it[minAmount] = BigDecimal.ONE
-            it[percent] = BigDecimal.TEN
-        } get Stock_Pair.id
     }
 
     fun initStockCurrency(stockId: Int, curId: Int, withdrawMin: BigDecimal, withdrawPercent: BigDecimal,

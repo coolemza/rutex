@@ -3,16 +3,15 @@ package data
 import database.OrderStatus
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.util.concurrent.Future
+import java.util.*
 
 data class Order(var id: Long, var summarize_id: Long, var order_id: Long, val type: String,
                  val pair: String, var rate: BigDecimal, var amount: BigDecimal, var remaining: BigDecimal,
                  var have: BigDecimal, var willGet: BigDecimal, val fee: BigDecimal,
                  var feeVal: BigDecimal, val stock: String, var status: OrderStatus, var  attempt: Int = 0) {
-    var arb_ids = mutableMapOf<Long, Int>()
-    lateinit var saved: Future<Boolean>
-    //var remaining = amount
 
+    constructor(stock: String, type: String, pair: String, rate: BigDecimal, amount: BigDecimal) : this(Math.abs(UUID.randomUUID().hashCode()).toLong(),
+            0L, 0L, type, pair, rate, amount, amount, amount, amount, BigDecimal.ZERO, BigDecimal.ZERO, stock, OrderStatus.ACTIVE)
 
     fun getLockCur() = pair.split("_")[if (type == "buy") 1 else 0]
 

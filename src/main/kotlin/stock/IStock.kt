@@ -18,8 +18,6 @@ enum class WithdrawStatus { SUCCESS, FAILED }
 
 data class Update(val pair:String, val type: BookType, val rate: BigDecimal, val amount: BigDecimal? = null)
 data class ApiRequest(val headers: Map<String, String>, val postData: String, val postReq: Map<String, String>)
-//data class WithdrawRequest(val address: String,)
-data class WithdrawResponse(val withdraw_id: Long, val status: WithdrawStatus)
 
 interface IStock {
     val state: State
@@ -58,7 +56,7 @@ interface IStock {
         }
     }
 
-    fun Active(activeList: MutableList<Order>) = async(newSingleThreadContext("Active")) {
+    fun active(activeList: MutableList<Order>) = async(newSingleThreadContext("Active")) {
         while (isActive) {
             RutEx.stateLock.read { activeList.filter { it.order_id != 0L } }.forEach {
                 kotlinx.coroutines.experimental.run(NonCancellable) {

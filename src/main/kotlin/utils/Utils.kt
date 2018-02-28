@@ -83,7 +83,7 @@ fun local2joda(time: LocalDateTime): org.joda.time.LocalDateTime {
     val java8ZonedDateTime = time.atZone(ZoneId.systemDefault())
     val java8Instant = java8ZonedDateTime.toInstant()
     val millis = java8Instant.toEpochMilli()
-    val jodaLocalDateTime = org.joda.time.LocalDateTime(millis);
+    val jodaLocalDateTime = org.joda.time.LocalDateTime(millis)
 
     return jodaLocalDateTime
 }

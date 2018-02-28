@@ -1,4 +1,5 @@
 import com.github.salomonbrys.kodein.*
+import database.*
 import data.DepthBook
 import database.Db
 import database.IDb
@@ -6,11 +7,15 @@ import database.KeyType
 import database.RutData
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.runBlocking
+import kotlinx.serialization.json.JSON
 import stock.IStock
+import java.io.File
 import stock.Kraken
 import stock.WEX
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.reflect.full.primaryConstructor
+
+enum class Params { dbUrl, dbDriver, dbUser, dbPassword, testKeys }
 
 object RutEx {
     val stateLock = ReentrantReadWriteLock()
@@ -18,18 +23,14 @@ object RutEx {
 
     private var stop = false
 
-    private val kodein = Kodein {
-        bind<IDb>() with singleton { Db() }
-        constant("testKeys") with RutData.getTestKeys()
-    }
+    val kodein = Kodein {
+        constant(Params.dbUrl) with "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
+        constant(Params.dbDriver) with "org.h2.Driver"
+        constant(Params.dbUser) with ""
+        constant(Params.dbPassword) with ""
+        constant(Params.testKeys) with (File("Rutex.keys").takeIf { it.exists() }?.readText()?.let { JSON.unquoted.parse<RutKeys>(it) } ?: RutData.getTestKeys())
 
-    init {
-        val db: IDb = kodein.instance()
-        val testKeys: Map<String, List<Triple<String, String, KeyType>>> = kodein.instance("testKeys")
-        testKeys.forEach {
-            val stockId = db.getStockInfo(it.key).id
-            it.value.forEach { db.initKey(stockId, it.first, it.second, it.third) }
-        }
+        bind<IDb>() with singleton { Db(kodein) }
     }
 
     @JvmStatic
