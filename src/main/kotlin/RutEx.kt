@@ -1,4 +1,5 @@
 import com.github.salomonbrys.kodein.*
+import data.DepthBook
 import database.Db
 import database.IDb
 import database.KeyType
@@ -39,10 +40,17 @@ object RutEx {
             //start()
 
             val theWex = WEX(kodein)
-            val some = theWex.getBalance()
+            //val some = theWex.getBalance()
+            //val info = theWex.info()
+            //info
+
+            val depth = theWex.getDepth(DepthBook(), "ltc_btc")
+            depth
 
             val theKraken = Kraken(kodein)
-            val some2 = theKraken.getBalance()
+            //val some2 = theKraken.getBalance()
+            val some2 = theKraken.getDepth(null, null)
+            //val some2 =theKraken.getOrderInfo()
 
             some2
         } catch (e: Exception) {
