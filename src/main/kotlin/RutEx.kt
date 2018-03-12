@@ -1,9 +1,11 @@
 import com.github.salomonbrys.kodein.*
 import database.*
 import data.DepthBook
+import data.Order
 import database.Db
 import database.IDb
 import database.KeyType
+import java.math.BigDecimal
 import database.RutData
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.runBlocking
@@ -39,6 +41,9 @@ object RutEx {
             //Runtime.getRuntime().addShutdownHook(Thread { RutEx.stop() })
 
             //start()
+
+            //Order(stock: String, type: String, pair: String, rate: BigDecimal, amount: BigDecimal)
+            Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(240), BigDecimal.valueOf(0.1))
 
             val theWex = WEX(kodein)
             //val some = theWex.getBalance()

@@ -2,7 +2,6 @@ package stock
 
 import com.github.salomonbrys.kodein.Kodein
 import com.github.salomonbrys.kodein.KodeinAware
-import com.google.gson.GsonBuilder
 import com.sun.xml.internal.ws.developer.Serialization
 import data.Depth
 import data.DepthBook

@@ -32,6 +32,8 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
 
         val some = getUrl("CancelOrder").let {
             (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getTradesKey().first(), it, params))) as JSONObject)}
+
+
     }
 
     override fun putOrders(orders: List<Order>) {
