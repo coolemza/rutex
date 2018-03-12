@@ -7,6 +7,7 @@ import data.Depth
 import data.DepthBook
 import data.Order
 import database.BookType
+import database.OrderStatus
 import database.StockCurrencyInfo
 import database.StockKey
 import org.json.simple.JSONArray
@@ -40,11 +41,30 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
+    //TO-DO: Change stock on transaction id
     override fun getOrderInfo(order: Order, updateTotal: Boolean) {
-        val params = mapOf("txid" to "OKVYMR-CEEOS-N2PYWF")
+        val params = mapOf("txid" to order.stock)
 
         val some = getUrl("QueryOrders").let {
             (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getTradesKey().first(), it, params))) as JSONObject)}
+
+        some
+
+        /*getUrl("OrderInfo").let {
+            (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getTradesKey().first(), it, params))) as JSONObject)?.also {
+                //TODO: int or Long? or String?
+                val res = (it["return"] as Map<*, *>).values.first() as Map<*, *>
+                val partialAmount = BigDecimal(res["amount"].toString())
+                val status = if (res["status"].toString() == "0") {
+                    if (order.amount > partialAmount) OrderStatus.PARTIAL else OrderStatus.ACTIVE
+                } else
+                    OrderStatus.COMPLETED
+
+                order.takeIf { it.status != status || it.remaining.compareTo(partialAmount) != 0 }
+                        ?.let { state.onActive(it.id, it.order_id, it.remaining - partialAmount, status, updateTotal) }
+
+            } ?: state.log.error("OrderInfo failed: $order")
+        }*/
     }
 
     //--------------------------------  history and statistic section  -----------------------------------------------------

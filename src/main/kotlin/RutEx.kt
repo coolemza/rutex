@@ -46,7 +46,7 @@ object RutEx {
             Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(240), BigDecimal.valueOf(0.1))
 
             val theWex = WEX(kodein)
-            //val some = theWex.getBalance()
+            val some = theWex.getBalance()
             //val info = theWex.info()
             //info
 
@@ -54,8 +54,8 @@ object RutEx {
             depth
 
             val theKraken = Kraken(kodein)
-            //val some2 = theKraken.getBalance()
-            val some2 = theKraken.getDepth(null, null)
+            val some2 = theKraken.getBalance()
+                    //val some2 = theKraken.getDepth(null, null)
             //val some2 =theKraken.getOrderInfo()
 
             some2
