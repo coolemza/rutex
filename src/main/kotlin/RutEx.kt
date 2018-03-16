@@ -45,20 +45,26 @@ object RutEx {
             //Order(stock: String, type: String, pair: String, rate: BigDecimal, amount: BigDecimal)
             Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(240), BigDecimal.valueOf(0.1))
 
-            val theWex = WEX(kodein)
-            val some = theWex.getBalance()
+            //val theWex = WEX(kodein)
+            //val some = theWex.getBalance()
             //val info = theWex.info()
             //info
 
-            val depth = theWex.getDepth(DepthBook(), "ltc_btc")
-            depth
+            //val depth = theWex.getDepth(DepthBook(), "ltc_btc")
+            //depth
 
             val theKraken = Kraken(kodein)
-            val some2 = theKraken.getBalance()
+            //val some2 = theKraken.getBalance()
                     //val some2 = theKraken.getDepth(null, null)
             //val some2 =theKraken.getOrderInfo()
+            val theOrder = Order("ORDQB6-NBKAI-4WY3ZW", "sell","ltcusd", BigDecimal.valueOf(250), BigDecimal.valueOf(0.1))
 
-            some2
+            theKraken.getOrderInfo(theOrder, false)
+
+            println(theOrder)
+
+
+           //some2
         } catch (e: Exception) {
             e.printStackTrace()
         }
