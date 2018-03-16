@@ -59,17 +59,17 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
             }?.also {
                 //it
                 val ret = (it["result"] as Map<*, *>)
-                val transactionId = ret["txid"]
-                val orderDescription = (ret["order"] as String).split(" ")
-                val remaining = BigDecimal.valueOf(orderDescription[1] as Long)
+                val transactionId: String = (ret["txid"] as JSONArray).first() as String
+                val orderDescription = (ret["descr"] as Map<*, *>)
+                val remaining = (orderDescription["order"] as String).split(" ")[1].toBigDecimal()
 
                 state.log.info(" thread id: ${Thread.currentThread().id} trade ok: remaining: ${remaining}  transaction_id: ${transactionId}")
 
-                val status = when (order_id) {
+                //TO-DO: Скорректировать единицу
+                val status = when (1L) {
                     0L -> OrderStatus.COMPLETED
                     else -> if (currOrder.amount > remaining) OrderStatus.PARTIAL else OrderStatus.ACTIVE
                 }
-
 
                 //TO-DO: Заменить единицу на order_id
                 state.onActive(currOrder.id, 1, currOrder.remaining - remaining, status)
