@@ -128,8 +128,76 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         }
     }
 
-    override fun updateHistory(fromId: Long): Long {
+    /*override fun updateHistory(fromId: Long): Long {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }*/
+
+
+    override fun updateHistory(fromId: Long): Long {
+        var lastId = fromId
+
+
+        //var openOrders = getUrl("OpenOrders").let {
+            //(ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getHistoryKey(), it))) as JSONObject)}
+            //(ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it, mapOf("userref" to "O4SIEB-QHTBQ-G4ZZVV")))) as JSONObject)}
+
+        //openOrders
+
+
+
+        var openOrders = getUrl("OpenOrders").let {
+            (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getHistoryKey(), it))) as JSONObject)}?.also{
+
+            val res = (it["result"] as Map<String, *>).toSortedMap()
+
+            val total = mutableMapOf<String, BigDecimal>()
+            val cc = res as Map<String, Map<String, *>>
+
+            res.forEach{
+                val cur = (it.value["currency"] as String).toLowerCase()
+                val amount = BigDecimal(it.value["amount"].toString())
+
+                state.log.info("found incoming transfer ${amount} $cur, status: ${it.value["status"]}")
+
+                total.run { put(cur, amount + getOrDefault(cur, BigDecimal.ZERO)) }
+            }
+
+            total.takeIf { it.isNotEmpty() }?.forEach { state.onWalletUpdate(plus = Pair(it.key, it.value)) }
+            lastId = res.lastKey().toLong()
+
+        }
+
+
+
+        /*getUrl("TransHistory").let {
+            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getHistoryKey(), it, mapOf("order" to "DESC", "from_id" to fromId))))?.also {
+                //TODO: int or Long? or String?
+                val res = (it["return"] as Map<String, *>).toSortedMap()
+                if (res.containsKey(fromId.toString())) {
+                    res.remove(fromId.toString())
+                    if (res.isNotEmpty()) {
+                        state.log.info("new history id: $fromId")
+                        val cc = res as Map<String, Map<String, *>>
+                        val total = mutableMapOf<String, BigDecimal>()
+                        cc.filterValues { it["type"] == 1L }.forEach {
+                            val cur = (it.value["currency"] as String).toLowerCase()
+                            val amount = BigDecimal(it.value["amount"].toString())
+
+                            state.log.info("found incoming transfer ${amount} $cur, status: ${it.value["status"]}")
+
+                            total.run { put(cur, amount + getOrDefault(cur, BigDecimal.ZERO)) }
+                        }
+                        total.takeIf { it.isNotEmpty() }?.forEach { state.onWalletUpdate(plus = Pair(it.key, it.value)) }
+                        lastId = res.lastKey().toLong()
+                    }
+                } else {
+                    state.log.error("history id not found!!!")
+                }
+            } ?: state.log.error("updateHistory failed")
+        }*/
+
+
+        return lastId
     }
 
     //--------------------------------------  service section  -------------------------------------------

@@ -69,6 +69,6 @@ class KrakenTest {
 
     @Test
     fun testHistory() {
-
+        stock.updateHistory(2)
     }
 }
