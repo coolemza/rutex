@@ -6,6 +6,8 @@ import java.math.BigDecimal
 
 class KrakenTest {
     var stock = Kraken(RutEx.kodein)
+    var firstOrderId: Long = 111
+    var secondOrderId: Long = 222
 
 
     //----------- ФАЗА: 1 ------------------//
@@ -17,16 +19,23 @@ class KrakenTest {
         wallet shouldHaveKey "xltc".toUpperCase()
     }
 
-    @Test
+/*    @Test
     fun testDepth() {
         val depth = stock.getDepth(null, null)
+
+        depth.
+
+        val firstBook = depth?.entries?.firstOrNull()
+        val some = (firstBook as LinkedHashMap<*, *>)?.entries?.firstOrNull()
+        //(some as Map <*, *>) shouldHaveKey "bid"
         println(depth)
-    }
+    }*/
 
     @Test
+    //Этот тест не нужен
     fun testOrderInfo() {
         val theOrder = Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(250), BigDecimal.valueOf(0.1))
-                .apply{transactionId = "OBE3Y2-UQDBK-HLHYLH"}
+                .apply{id = firstOrderId}
 
         stock.getOrderInfo(theOrder, false)
 
@@ -35,7 +44,7 @@ class KrakenTest {
 
     @Test
     fun testPutOrder() {
-        val theOrder = Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(270), BigDecimal.valueOf(0.1))
+        val theOrder = Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(270), BigDecimal.valueOf(0.1)).apply { id = firstOrderId}
         var listOrders = listOf<Order>(theOrder)
 
         stock.putOrders(listOrders)
@@ -45,12 +54,13 @@ class KrakenTest {
 
     //TO-DO: Введенно общее поле, transaction_id - обсудить.
     @Test
+    //Объеденить с putOrder
     fun testCancelOrder() {
         val theOrder = Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(240), BigDecimal.valueOf(0.1))
-                .apply { transactionId = "OOMEXB-7W5U6-K4XRYQ"}
+                .apply { id = firstOrderId}
 
         val theOrder2 = Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(240), BigDecimal.valueOf(0.1))
-                .apply { transactionId = "OMC7TZ-74J67-53WYPN"}
+                //.apply { id = secondOrderId}
 
         val orderListForCancel = listOf<Order>(theOrder, theOrder2)
 
@@ -63,12 +73,18 @@ class KrakenTest {
     //--------------- ФАЗА: 2 -----------------//
     @Test
     fun testWithdraw() {
-        //stock.withdraw(Pair("asdf", "asdf"), "asdf", BigDecimal.valueOf(240))
+        stock.withdraw(Pair("Bi", ""), "LTC", BigDecimal.valueOf(0.01))
 
     }
 
     @Test
     fun testHistory() {
         stock.updateHistory(2)
+    }
+
+    @Test
+    fun testInfo() {
+        val info = stock.info()
+        info
     }
 }

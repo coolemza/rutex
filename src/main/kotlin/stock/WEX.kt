@@ -2,7 +2,6 @@ package stock
 
 import com.github.salomonbrys.kodein.Kodein
 import com.github.salomonbrys.kodein.KodeinAware
-import com.sun.xml.internal.ws.developer.Serialization
 import data.Depth
 import data.DepthBook
 import data.Order
@@ -16,19 +15,6 @@ import java.net.URLEncoder
 import java.util.concurrent.Executors
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
-
-@Serialization
-class WexInfoDto{
-    var success: HashMap<String, Long> = hashMapOf("ad" to 2L)
-    //var pairs: Pairs? = null
-}
-
-@Serialization
-class ConvertionInfo(val decimal_places: Int, val min_price: Double, val max_price: Int,
-                          val min_amount: Double, val hidden: Int, val fee: Double)
-
-@Serialization
-class Pairs(val some: Map<String, ConvertionInfo>)
 
 class WEX(override val kodein: Kodein) : IStock, KodeinAware {
     override val state = State(this::class.simpleName!!, kodein)
@@ -54,8 +40,6 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         }
     }
 
-    //input: последняя обработанная транзакция - на стороне клиента
-    //output: последняя транзакция (номер) - на бирже
     override fun updateHistory(fromId: Long): Long {
         var lastId = fromId
 
@@ -88,7 +72,6 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         return lastId
     }
 
-    //информация о "стакане"
     override fun getDepth(updateTo: DepthBook?, pair: String?): DepthBook? {
         val update = if (updateTo != null) updateTo else DepthBook()
         ParseResponse(state.SendRequest(getDepthUrl()))?.also {
@@ -121,7 +104,6 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         return ApiRequest(mapOf("Key" to key.key, "Sign" to sign), postData, params)
     }
 
-    //инфомаиця о оредере
     override fun getOrderInfo(order: Order, updateTotal: Boolean) {
         getUrl("OrderInfo").let {
             ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getActiveKey(), it, mapOf("order_id" to order.order_id))))?.also {
@@ -154,7 +136,6 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         return null
     }
 
-    // 3 ключа для того чтобы паралельно
     override fun putOrders(orders: List<Order>) {
         tm.getKeys(orders).let {
             if (it != null) {

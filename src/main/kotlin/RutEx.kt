@@ -53,15 +53,15 @@ object RutEx {
             //val depth = theWex.getDepth(DepthBook(), "ltc_btc")
             //depth
 
-            val theKraken = Kraken(kodein)
+            //val theKraken = Kraken(kodein)
             //val some2 = theKraken.getBalance()
                     //val some2 = theKraken.getDepth(null, null)
             //val some2 =theKraken.getOrderInfo()
-            val theOrder = Order("ORDQB6-NBKAI-4WY3ZW", "sell","ltcusd", BigDecimal.valueOf(250), BigDecimal.valueOf(0.1))
+            //val theOrder = Order("ORDQB6-NBKAI-4WY3ZW", "sell","ltcusd", BigDecimal.valueOf(250), BigDecimal.valueOf(0.1))
 
-            theKraken.getOrderInfo(theOrder, false)
+            //theKraken.getOrderInfo(theOrder, false)
 
-            println(theOrder)
+           //println(theOrder)
 
 
            //some2

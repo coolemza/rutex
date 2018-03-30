@@ -6,28 +6,69 @@ import com.sun.xml.internal.ws.developer.Serialization
 import data.Depth
 import data.DepthBook
 import data.Order
-import database.BookType
-import database.OrderStatus
-import database.StockCurrencyInfo
-import database.StockKey
+import database.*
+import kotlinx.coroutines.experimental.Deferred
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import java.math.BigDecimal
 import java.net.URLEncoder
 import java.security.MessageDigest
 import java.util.*
+import java.util.concurrent.Executors
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     override val state = State(this::class.simpleName!!, kodein)
+    private var tm = TradeManager(state)
+    private val statePool = Executors.newScheduledThreadPool(1)
+    private val coroutines = mutableListOf<Deferred<Unit>>()
+
     fun getUrl(cmd: String) = mapOf("https://api.kraken.com/0/private/$cmd" to "/0/private/$cmd")
+    fun getDepthUrl(currentPair: String, limit: String) = "https://api.kraken.com/0/public/Depth?pair=${currentPair}&count=${limit}"
+
+    fun browserEmulationString() = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.152 Safari/537.36"
+    fun minimunOrderSizePageUrl() = "https://support.kraken.com/hc/en-us/articles/205893708-What-is-the-minimum-order-size"
+
+
+    fun info(): Map<String, PairInfo>? {
+        /*return getApi3Url("info").let {
+            ParseResponse(state.SendRequest(it.keys.first()))?.let {
+                (it["pairs"] as Map<*, *>).filter { state.pairs.containsKey(it.key.toString()) }.map {
+                    it.key.toString() to PairInfo(state.pairs[it.key]!!.pairId, state.pairs[it.key]!!.stockPairId,
+                            BigDecimal((it.value as Map<*, *>)["min_amount"].toString()))
+                }.toMap()
+            }
+        }*/
+
+        var minAmountList = arrayListOf<String>()
+        Jsoup.connect(minimunOrderSizePageUrl())
+                .userAgent(browserEmulationString())
+                .get().run { select("article li").forEachIndexed { index, element ->
+                    //(element as String).split(":")
+                    println(element.html())
+                    minAmountList.add(element.html())
+                }
+        }
+
+        var minAmountMap = hashMapOf<String, String>()
+        minAmountList.stream().forEach{
+                var currentLine = it.split(":")
+                minAmountMap.put(currentLine[0], currentLine[1])
+
+        }
+
+
+        return null
+    }
 
     //----------------------------------------  order section  --------------------------------------------------
     override fun cancelOrders(orders: List<Order>) {
         orders.forEach {
-            val params = mapOf("txid" to it.transactionId)
+            val params = mapOf("txid" to it.id)
             var currentOrder = it
 
             getUrl("CancelOrder").let {
@@ -35,9 +76,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
             }?.also {
                 when(((it["result"] as Map<*, *>)["count"]) as Long){
                     1L -> {
-                        currentOrder.status = OrderStatus.CANCELED
-
-                        //state.onActive()  --  обновление на стороне сервера
+                        state.onActive(currentOrder.id, currentOrder.order_id, currentOrder.amount, OrderStatus.CANCELED)
                     }
                     else -> state.log.error("Order cancellation failed.")
                 }
@@ -45,19 +84,16 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         }
     }
 
-    //1. Нет order_id только transaction id
-    //2.
     override fun putOrders(orders: List<Order>) {
         orders.forEach{
             var currOrder = it
             val params = mapOf("pair" to it.pair, "type" to it.type, "ordertype" to "limit", "price" to it.rate,
-                    "volume" to it.amount)
+                    "volume" to it.amount, "userref" to it.id)
 
             state.log.info("send tp play ${params.entries.joinToString { "${it.key}:${it.value}" }}")
-            val some = getUrl("AddOrder").let {
+            getUrl("AddOrder").let {
                 (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getTradesKey().first(), it, params))) as JSONObject)
             }?.also {
-                //it
                 val ret = (it["result"] as Map<*, *>)
                 val transactionId: String = (ret["txid"] as JSONArray).first() as String
                 val orderDescription = (ret["descr"] as Map<*, *>)
@@ -65,24 +101,24 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
 
                 state.log.info(" thread id: ${Thread.currentThread().id} trade ok: remaining: ${remaining}  transaction_id: ${transactionId}")
 
-                //TO-DO: Скорректировать единицу
-                val status = when (1L) {
-                    0L -> OrderStatus.COMPLETED
-                    else -> if (currOrder.amount > remaining) OrderStatus.PARTIAL else OrderStatus.ACTIVE
+                var status: OrderStatus = OrderStatus.COMPLETED
+                if(orderDescription["close"] == null){
+                    if (currOrder.amount > remaining)
+                        status = OrderStatus.PARTIAL
+                    else
+                        status = OrderStatus.ACTIVE
                 }
 
-                //TO-DO: Заменить единицу на order_id
-                state.onActive(currOrder.id, 1, currOrder.remaining - remaining, status)
+                state.onActive(currOrder.id, currOrder.order_id, currOrder.remaining - remaining, status)
             }
         }
     }
 
     override fun getOrderInfo(order: Order, updateTotal: Boolean) {
-        val params = mapOf("txid" to order.transactionId)
+        val params = mapOf("userref" to order.id)
 
         getUrl("QueryOrders").let {
             (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getTradesKey().first(), it, params))) as JSONObject)?.also {
-                //TODO: int or Long? or String?
                 val res = (it["result"] as Map<*, *>).values.first() as Map<*, *>
                 val partialAmount = BigDecimal(res["vol"].toString())
                 val status = if (res["status"].toString().equals("open")) {
@@ -97,6 +133,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     }
 
     //--------------------------------  history and statistic section  -----------------------------------------------------
+    //информация о "стакане"
     override fun getDepth(updateTo: DepthBook?, pair: String?): DepthBook? {
         val update = if (updateTo != null) updateTo else DepthBook()
 
@@ -128,11 +165,8 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         }
     }
 
-    /*override fun updateHistory(fromId: Long): Long {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }*/
-
-
+    //input: последняя обработанная транзакция - на стороне клиента
+    //output: последняя транзакция (номер) - на бирже
     override fun updateHistory(fromId: Long): Long {
         var lastId = fromId
 
@@ -230,61 +264,35 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         } else if (obj is JSONArray) {
             return obj
         } else {
-            state.log.error("unknown")
+            state.log.error("unknown error")
             return null
         }
     }
 
     override fun start() {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        syncWallet()
+        coroutines.addAll(listOf(active(state.activeList), depth(), history(state.lastHistoryId, 2, 1),
+                info(this::info, 5, state.name, state.pairs), debugWallet(state.debugWallet)))
     }
 
     override fun stop() {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        statePool.shutdown()
+        tm.shutdown()
+        state.shutdown()
     }
 
     override fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): Pair<Long, WithdrawStatus> {
-        //val data = mapOf("amount" to amount.toPlainString(), "asset" to crossCur.toUpperCase(), "address" to address.first)
-        val data = mapOf("amount" to BigDecimal.valueOf(0.01), "asset" to "LTC", "key" to "Kraken")
+        val data = mapOf("amount" to amount.toPlainString(), "asset" to crossCur.toUpperCase(), "key" to address.first)
 
+        var some = getUrl("Withdraw").let {
+            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data))) as JSONObject
+        }?.let {
+            val txId: String = (it["result"] as Map<String, *>)["refid"] as String
+            val txHash: Long = txId.hashCode().toLong()
 
-       // https://api.kraken.com/0/private/WithdrawInfo
-
-        //https://api.kraken.com/0/private/Withdraw
-
-         var some = getUrl("Withdraw").let {
-            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data))) as JSONObject}
-
-          //some
-
-        return Pair(0L, WithdrawStatus.FAILED);
-
-/*        return getUrl("WithdrawCoin").let {
-            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data)))?.let {
-                val res = it["return"] as Map<*, *>
-                if (it["success"] == 1L) {
-                    return Pair(res["tId"] as Long, WithdrawStatus.SUCCESS)
-                } else {
-                    return Pair(0L, WithdrawStatus.FAILED)
-                }
-            } ?: return Pair(0L, WithdrawStatus.FAILED)
-        }*/
-    }
-
-    /*override fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): Pair<Long, WithdrawStatus> {
-        val data = mapOf("amount" to amount.toPlainString(), "coinName" to crossCur.toUpperCase(), "address" to address.first)
-
-        return getUrl("WithdrawCoin").let {
-            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data)))?.let {
-                val res = it["return"] as Map<*, *>
-                if (it["success"] == 1L) {
-                    return Pair(res["tId"] as Long, WithdrawStatus.SUCCESS)
-                } else {
-                    return Pair(0L, WithdrawStatus.FAILED)
-                }
-            } ?: return Pair(0L, WithdrawStatus.FAILED)
+            return Pair(txHash, WithdrawStatus.SUCCESS)
         }
-    }*/
+    }
 
     //--------------------------------------  utils section  -------------------------------------------
     fun pairFromRutexToKrakenFormat(pair: String): String {
@@ -306,5 +314,4 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     }
 
     fun pairFromKrakenToRutexFormat(pair: String)= ""
-    fun getDepthUrl(currentPair: String, limit: String) = "https://api.kraken.com/0/public/Depth?pair=${currentPair}&count=${limit}"
 }

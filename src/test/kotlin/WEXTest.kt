@@ -12,4 +12,10 @@ class WEXTest {
         wallet shouldHaveKey "btc"
         wallet shouldHaveKey "ltc"
     }
+
+    @Test
+    fun testInfo() {
+        val info = stock.info()
+        info
+    }
 }
