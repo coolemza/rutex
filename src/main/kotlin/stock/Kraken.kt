@@ -313,16 +313,12 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         }
     }
 
-    fun isKeyKontainValue(map1: Map<String, *>, value: String): Boolean{
-        map1.forEach{
-            var sasdf = it.key
-            //if(it.key.contains(value + "_").con){
+    fun isKeyKontainValue(map: Map<String, *>, value: String): Boolean{
+        map.forEach{
             if(value.contains(it.key + "_")){
                 return true
             }
         }
         return false
     }
-
-    fun pairFromKrakenToRutexFormat(pair: String)= ""
 }
