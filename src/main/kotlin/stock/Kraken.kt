@@ -35,34 +35,34 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
 
 
     fun info(): Map<String, PairInfo>? {
-        /*return getApi3Url("info").let {
-            ParseResponse(state.SendRequest(it.keys.first()))?.let {
-                (it["pairs"] as Map<*, *>).filter { state.pairs.containsKey(it.key.toString()) }.map {
-                    it.key.toString() to PairInfo(state.pairs[it.key]!!.pairId, state.pairs[it.key]!!.stockPairId,
-                            BigDecimal((it.value as Map<*, *>)["min_amount"].toString()))
-                }.toMap()
-            }
-        }*/
-
+        //get amount as list
         var minAmountList = arrayListOf<String>()
         Jsoup.connect(minimunOrderSizePageUrl())
                 .userAgent(browserEmulationString())
-                .get().run { select("article li").forEachIndexed { index, element ->
-                    //(element as String).split(":")
-                    println(element.html())
+                .get().run { select("article li").forEach { element ->
                     minAmountList.add(element.html())
                 }
         }
 
+        //split to pair
         var minAmountMap = hashMapOf<String, String>()
         minAmountList.stream().forEach{
-                var currentLine = it.split(":")
-                minAmountMap.put(currentLine[0], currentLine[1])
+                var currentLine: List<String> = it.split(":")
+                var key = ".*?\\(([^)]*)\\).*".toRegex().matchEntire(currentLine[0])?.groups?.get(1)?.value
 
+                //Convert bitcoin tiker to rutex format
+                if(key.equals("XBT")){
+                    key = "btc"
+                }
+
+                minAmountMap.put(key!!.toLowerCase(), currentLine[1])
         }
 
-
-        return null
+        var i: Int = 0
+        return state.pairs.filter{isKeyKontainValue(minAmountMap, it.key) }.map {
+            it.key to PairInfo(++i, i,
+                    BigDecimal((minAmountMap[it.key.split("_")[0]] as String).trim()))
+        }.toMap()
     }
 
     //----------------------------------------  order section  --------------------------------------------------
@@ -311,6 +311,17 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
 
             return resultPair
         }
+    }
+
+    fun isKeyKontainValue(map1: Map<String, *>, value: String): Boolean{
+        map1.forEach{
+            var sasdf = it.key
+            //if(it.key.contains(value + "_").con){
+            if(value.contains(it.key + "_")){
+                return true
+            }
+        }
+        return false
     }
 
     fun pairFromKrakenToRutexFormat(pair: String)= ""
