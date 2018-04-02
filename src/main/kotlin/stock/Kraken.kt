@@ -11,7 +11,6 @@ import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
 import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
 import java.math.BigDecimal
 import java.net.URLEncoder
 import java.security.MessageDigest
@@ -165,8 +164,6 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         }
     }
 
-    //input: последняя обработанная транзакция - на стороне клиента
-    //output: последняя транзакция (номер) - на бирже
     override fun updateHistory(lastTimeStamp: Long): Long {
         var maxTime = 0L
 
