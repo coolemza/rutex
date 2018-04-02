@@ -18,4 +18,10 @@ class WEXTest {
         val info = stock.info()
         info
     }
+
+    @Test
+    fun testHistory() {
+        val info = stock.updateHistory(0L)
+        info
+    }
 }

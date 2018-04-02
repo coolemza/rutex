@@ -19,17 +19,19 @@ class KrakenTest {
         wallet shouldHaveKey "xltc".toUpperCase()
     }
 
-/*    @Test
+    @Test
     fun testDepth() {
         val depth = stock.getDepth(null, null)
 
-        depth.
+        //depth.
 
         val firstBook = depth?.entries?.firstOrNull()
         val some = (firstBook as LinkedHashMap<*, *>)?.entries?.firstOrNull()
+        //val some = (firstBook as LinkedHashMap<*, *>)
+                //?.entries?.firstOrNull()
         //(some as Map <*, *>) shouldHaveKey "bid"
         println(depth)
-    }*/
+    }
 
     @Test
     //Этот тест не нужен
@@ -79,7 +81,8 @@ class KrakenTest {
 
     @Test
     fun testHistory() {
-        stock.updateHistory(2)
+        var some = stock.updateHistory(2)
+        some
     }
 
     @Test
