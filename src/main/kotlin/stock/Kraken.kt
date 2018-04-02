@@ -19,6 +19,7 @@ import java.util.*
 import java.util.concurrent.Executors
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
+import kotlin.collections.HashMap
 
 class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     override val state = State(this::class.simpleName!!, kodein)
@@ -166,26 +167,44 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
 
     //input: последняя обработанная транзакция - на стороне клиента
     //output: последняя транзакция (номер) - на бирже
-    override fun updateHistory(fromId: Long): Long {
-        var lastId = fromId
+    override fun updateHistory(lastTimeStamp: Long): Long {
+        var maxTime = 0L
 
-        val params = mapOf("asset" to "ltc")
+        state.currencies.forEach {
+            var currentTimeFromFunds = 0L
 
-        //var openOrders = getUrl("OpenOrders").let {
-            //(ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getHistoryKey(), it))) as JSONObject)}
-            //(ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it, mapOf("userref" to "O4SIEB-QHTBQ-G4ZZVV")))) as JSONObject)}
+            //ticker may difference on kraken and rutex locally
+            var asset = tickerFromRutexToKrakenFormat(it.key)
+            var params = mapOf("asset" to asset)
+            getUrl("DepositStatus").let {
+                (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it, params))) as JSONObject)
+            }?.let {
+                var historyList = it["result"] as JSONArray
 
-        //openOrders
+                val total = mutableMapOf<String, BigDecimal>()
+                historyList.forEach {
+                    val current = it as HashMap<*, *>
+                    currentTimeFromFunds = current["time"].toString().toLong()
 
-        var openOrders = getUrl("DepositStatus").let {
-            (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it, params))) as JSONObject)}?.let{
-            it
-            println(it)
+                    if(lastTimeStamp < currentTimeFromFunds) {
+                        var cur = asset
+                        var amount = BigDecimal(current["amount"].toString())
+
+                        state.log.info("found incoming transfer ${amount} $cur, status: ${it["status"].toString().toLowerCase()}")
+
+                        total.run { put(cur, amount + getOrDefault(cur, BigDecimal.ZERO)) }
+
+                        if (currentTimeFromFunds > maxTime){
+                            maxTime = currentTimeFromFunds
+                        }
+                    }
+                }
+
+                total.takeIf { it.isNotEmpty() }?.forEach { state.onWalletUpdate(plus = Pair(it.key, it.value)) }
+            }
         }
 
-
-
-        return lastId
+        return maxTime
     }
 
     //--------------------------------------  service section  -------------------------------------------
@@ -264,6 +283,13 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
             })
 
             return resultPair
+        }
+    }
+
+    fun tickerFromRutexToKrakenFormat(ticker: String): String{
+        return when(ticker){
+            "btc" -> "xbt"
+            else  -> ticker
         }
     }
 
