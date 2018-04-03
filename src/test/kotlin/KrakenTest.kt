@@ -1,4 +1,6 @@
+import data.Depth
 import data.Order
+import database.BookType
 import org.amshove.kluent.`should be in`
 import org.amshove.kluent.shouldHaveKey
 import org.junit.Test
@@ -22,14 +24,16 @@ class KrakenTest {
     @Test
     fun testDepth() {
         val depth = stock.getDepth(null, null)
+        var status: Boolean = true
 
         depth?.forEach{
-            if(!(it.value as Map<String, *>).containsKey("bids") || !(it.value as Map<String, *>).containsKey("asks")){
-                assert(true)
+            (it.value as Map<String, *>).forEach{
+                if(!((it.key as BookType).toString().trim().contains("bids") || (it.key as BookType).toString().trim().contains("asks")))
+                    status = false
             }
         }
 
-        assert(true)
+        assert(status)
     }
 
     @Test
