@@ -108,7 +108,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
                         status = OrderStatus.ACTIVE
                 }
 
-                state.onActive(currOrder.id, currOrder.order_id, currOrder.remaining - remaining, status)
+                state.onActive(currOrder.id, currOrder.order_id, currOrder.remaining - remaining, status, false)
             }
         }
     }

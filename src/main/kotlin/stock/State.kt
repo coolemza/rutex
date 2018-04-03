@@ -62,6 +62,7 @@ class State(val name: String, override val kodein: Kodein): KodeinAware {
     fun getWithdrawKey() = keys.find { it.type == KeyType.WITHDRAW }!!
     fun getHistoryKey() = keys.find { it.type == KeyType.HISTORY }!!
     fun getTradesKey() = keys.filter { it.type == KeyType.TRADE }
+    //fun getListActiveOrders(): List<Order> {return activeList}
 
     fun getLocked(orderList: MutableList<Order> = activeList) =  orderList.groupBy { it.getLockCur() }
             .map { it.key to it.value.sumByDecimal { it.getLockAmount() } }.toMap()
