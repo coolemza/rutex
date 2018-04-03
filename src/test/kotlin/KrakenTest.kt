@@ -8,6 +8,7 @@ class KrakenTest {
     var stock = Kraken(RutEx.kodein)
     var firstOrderId: Long = 111
     var secondOrderId: Long = 222
+    var orderId: Long = 0L
 
 
     //----------- ФАЗА: 1 ------------------//
@@ -23,21 +24,17 @@ class KrakenTest {
     fun testDepth() {
         val depth = stock.getDepth(null, null)
 
-        //depth.
-
-        val firstBook = depth?.entries?.firstOrNull()
-        val some = (firstBook as LinkedHashMap<*, *>)?.entries?.firstOrNull()
-        //val some = (firstBook as LinkedHashMap<*, *>)
-                //?.entries?.firstOrNull()
-        //(some as Map <*, *>) shouldHaveKey "bid"
-        println(depth)
+        depth?.forEach{
+            (it.value as Map<String, *>).containsKey("bids")
+            (it.value as Map<String, *>).containsKey("asks")
+        }
     }
 
     @Test
-    //Этот тест не нужен
+            //Этот тест не нужен
     fun testOrderInfo() {
-        val theOrder = Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(250), BigDecimal.valueOf(0.1))
-                .apply{id = firstOrderId}
+        val theOrder = Order("Kraken", "sell", "ltcusd", BigDecimal.valueOf(250), BigDecimal.valueOf(0.1))
+                .apply { id = firstOrderId }
 
         stock.getOrderInfo(theOrder, false)
 
@@ -46,23 +43,29 @@ class KrakenTest {
 
     @Test
     fun testPutOrder() {
-        val theOrder = Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(270), BigDecimal.valueOf(0.1)).apply { id = firstOrderId}
+        val theOrder = Order("Kraken", "sell", "ltcusd", BigDecimal.valueOf(270), BigDecimal.valueOf(0.1)).apply { id = firstOrderId }
         var listOrders = listOf<Order>(theOrder)
 
+/*
         stock.putOrders(listOrders)
+        stock.getO
+        stock.active()
+*/
+
+
 
         println(theOrder)
     }
 
     //TO-DO: Введенно общее поле, transaction_id - обсудить.
     @Test
-    //Объеденить с putOrder
+            //Объеденить с putOrder
     fun testCancelOrder() {
-        val theOrder = Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(240), BigDecimal.valueOf(0.1))
-                .apply { id = firstOrderId}
+        val theOrder = Order("Kraken", "sell", "ltcusd", BigDecimal.valueOf(240), BigDecimal.valueOf(0.1))
+                .apply { id = firstOrderId }
 
-        val theOrder2 = Order("Kraken", "sell","ltcusd", BigDecimal.valueOf(240), BigDecimal.valueOf(0.1))
-                //.apply { id = secondOrderId}
+        val theOrder2 = Order("Kraken", "sell", "ltcusd", BigDecimal.valueOf(240), BigDecimal.valueOf(0.1))
+        //.apply { id = secondOrderId}
 
         val orderListForCancel = listOf<Order>(theOrder, theOrder2)
 
@@ -73,21 +76,13 @@ class KrakenTest {
 
 
     //--------------- ФАЗА: 2 -----------------//
-    @Test
-    fun testWithdraw() {
-        stock.withdraw(Pair("Bi", ""), "LTC", BigDecimal.valueOf(0.01))
-
-    }
+    //@Test
+    //fun testWithdraw() {
+        // stock.withdraw(Pair("Bi", ""), "LTC", BigDecimal.valueOf(0.01))
+    //}
 
     @Test
     fun testHistory() {
-        var some = stock.updateHistory(2)
-        some
-    }
-
-    @Test
-    fun testInfo() {
-        val info = stock.info()
-        info
+        stock.updateHistory(2) is Long
     }
 }
