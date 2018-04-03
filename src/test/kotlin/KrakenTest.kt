@@ -1,7 +1,5 @@
-import data.Depth
 import data.Order
 import database.BookType
-import org.amshove.kluent.`should be in`
 import org.amshove.kluent.shouldHaveKey
 import org.junit.Test
 import stock.Kraken
@@ -11,14 +9,10 @@ class KrakenTest {
     var stock = Kraken(RutEx.kodein)
     var orderId: Long = 0L
 
-
     @Test
     fun testWallet() {
         val wallet = stock.getBalance()!!
-        //wallet shouldHaveKey "usd"
-        //wallet shouldHaveKey "btc"
-        //wallet shouldHaveKey "xltc".toUpperCase()
-        assert(wallet.containsKey("xltc".toUpperCase()))
+        wallet shouldHaveKey "ltc"
     }
 
     @Test
@@ -34,6 +28,11 @@ class KrakenTest {
         }
 
         assert(status)
+    }
+
+    @Test
+    fun testInfo() {
+        stock.info()
     }
 
     @Test

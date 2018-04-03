@@ -24,17 +24,34 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
 
         val stocks = RutData.getStocks().associateBy({ it }) { initStock(it) }
 
-        val currencies = RutData.getCurrencies().associateBy({ it }) {
-            initCurrency(it, it != "usd" && it != "eur" && it != "rur")
-        }
-        val pairs = RutData.getPairs().associateBy({ it }) { initPair(it) }
+//        val currencies = RutData.getCurrencies().associateBy({ it }) {
+//            initCurrency(it, it != "usd" && it != "eur" && it != "rur")
+//        }
 
-        stocks.forEach { _, stockId ->
-            currencies.forEach { _, curId ->
-                initStockCurrency(stockId, curId, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, "", "")
+        val currencies = RutData.getCurrencies().associateBy({ it }) {
+            val crypto = it != "usd" && it != "eur" && it != "rur"
+            Pair(initCurrency(it, crypto), crypto)
+        }
+
+//        val pairs = RutData.getPairs().associateBy({ it }) { initPair(it) }
+        val pairs = RutData.getStockPairs().map { it.value }.reduce { a, b -> a + b }.toSet().associateBy({ it }) { initPair(it) }
+
+//        stocks.forEach { _, stockId ->
+//            currencies.forEach { _, curId ->
+//                initStockCurrency(stockId, curId, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, "", "")
+//            }
+//            pairs.forEach { _, pairId ->
+//                initStockPair(stockId, pairId, BigDecimal("0.002"), BigDecimal("0.001"))
+//            }
+//        }
+
+        stocks.forEach { stock, stockId ->
+            RutData.getStockPairs()[stock]!!.map { it.split("_") }.reduce { a, b -> a + b }.toSet().sorted().forEach {
+                initStockCurrency(stockId, currencies[it]!!.first, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, "", "")
             }
-            pairs.forEach { _, pairId ->
-                initStockPair(stockId, pairId, BigDecimal("0.002"), BigDecimal("0.001"))
+
+            RutData.getStockPairs()[stock]!!.forEach {
+                initStockPair(stockId, pairs[it]!!, BigDecimal("0.002"), BigDecimal("0.001"))
             }
         }
 

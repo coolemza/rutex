@@ -1,12 +1,46 @@
 package database
 
 import kotlinx.serialization.Serializable
+import stock.Kraken
+import stock.WEX
 
 @Serializable
 data class Key(val key: String, val secret: String, val type: KeyType)
 
 @Serializable
 data class RutKeys(val keys: Map<String, List<Key>>)
+
+enum class C {
+    bch,
+    btc,
+    cnh,
+    doge,
+    dsh,
+    eos,
+    etc,
+    eth,
+    eur,
+    gbp,
+    gno,
+    icn,
+    iota,
+    ltc,
+    mln,
+    nmc,
+    nvc,
+    omg,
+    ppc,
+    rep,
+    rrt,
+    rur,
+    san,
+    usd,
+    usdt,
+    xlm,
+    xmr,
+    xrp,
+    zec
+}
 
 object RutData {
     fun getStocks(): List<String> {
@@ -15,18 +49,15 @@ object RutData {
                 "Kraken")
     }
 
-    fun getCurrencies(): List<String> {
-        return listOf(
-                "btc",
-                "ltc",
-                "usd")
-    }
+    fun getCurrencies() = C.values().map { it.name }
 
-    fun getPairs(): List<String> {
-        return listOf(
-                "btc_usd",
-                "ltc_btc",
-                "ltc_usd")
+    fun P(cur1: C, cur2: C) = "${cur1.name}_${cur2.name}"
+
+    fun getStockPairs(): Map<String, List<String>> {
+        return mapOf(
+                "WEX" to WEX.Pairs,
+                "Kraken" to Kraken.Pairs
+        )
     }
 
     fun getTestKeys(): RutKeys {

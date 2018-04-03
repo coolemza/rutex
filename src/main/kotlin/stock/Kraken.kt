@@ -26,49 +26,37 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     private val statePool = Executors.newScheduledThreadPool(1)
     private val coroutines = mutableListOf<Deferred<Unit>>()
 
-    fun getUrl(cmd: String) = mapOf("https://api.kraken.com/0/private/$cmd" to "/0/private/$cmd")
-    fun getDepthUrl(currentPair: String, limit: String) = "https://api.kraken.com/0/public/Depth?pair=${currentPair}&count=${limit}"
+    private fun getUrl(cmd: String) = mapOf("https://api.kraken.com/0/private/$cmd" to "/0/private/$cmd")
+    private fun getDepthUrl(currentPair: String, limit: String) = "https://api.kraken.com/0/public/Depth?pair=${currentPair}&count=${limit}"
 
-    fun browserEmulationString() = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.152 Safari/537.36"
-    fun minimunOrderSizePageUrl() = "https://support.kraken.com/hc/en-us/articles/205893708-What-is-the-minimum-order-size"
+    private fun browserEmulationString() = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.152 Safari/537.36"
+    private fun minimunOrderSizePageUrl() = "https://support.kraken.com/hc/en-us/articles/205893708-What-is-the-minimum-order-size"
+
+    private fun getRutCurrency(cur: String) = when (cur) {
+        "XBT" -> C.btc
+        "XLTC" -> C.ltc
+        "DASH" -> C.dsh
+        else -> C.valueOf(cur.toLowerCase())
+    }.toString()
 
 
     fun info(): Map<String, PairInfo>? {
-        //get amount as list
-        var minAmountList = arrayListOf<String>()
-        Jsoup.connect(minimunOrderSizePageUrl())
-                .userAgent(browserEmulationString())
-                .get().run { select("article li").forEach { element ->
-                    minAmountList.add(element.html())
-                }
-        }
+        val htmlList = Jsoup.connect(minimunOrderSizePageUrl())
+                .userAgent(browserEmulationString()).get().select("article li").map { it.html() }
 
-        //split to pair
-        var minAmountMap = hashMapOf<String, String>()
-        minAmountList.stream().forEach{
-                var currentLine: List<String> = it.split(":")
-                var key = ".*?\\(([^)]*)\\).*".toRegex().matchEntire(currentLine[0])?.groups?.get(1)?.value
-
-                //Convert bitcoin tiker to rutex format
-                if(key.equals("XBT")){
-                    key = "btc"
-                }
-
-                minAmountMap.put(key!!.toLowerCase(), currentLine[1])
-        }
-
-        var i: Int = 0
-        return state.pairs.filter{isKeyKontainValue(minAmountMap, it.key) }.map {
-            it.key to PairInfo(++i, i,
-                    BigDecimal((minAmountMap[it.key.split("_")[0]] as String).trim()))
+        val minAmount = htmlList.map {
+            getRutCurrency(".*?\\(([^)]*)\\).*".toRegex().matchEntire(it.split(":")[0])!!.groups.get(1)!!.value) to
+            BigDecimal(it.split(":")[1].trim())
         }.toMap()
+
+        return state.pairs.map { it.key to PairInfo(0, 0, minAmount[it.key.split("_")[0]]!!) }.toMap()
     }
 
     //----------------------------------------  order section  --------------------------------------------------
     override fun cancelOrders(orders: List<Order>) {
         orders.forEach {
             val params = mapOf("txid" to it.id)
-            var currentOrder = it
+            val currentOrder = it
 
             getUrl("CancelOrder").let {
                 (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getTradesKey().first(), it, params))) as JSONObject)
@@ -85,7 +73,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
 
     override fun putOrders(orders: List<Order>) {
         orders.forEach{
-            var currOrder = it
+            val currOrder = it
             val params = mapOf("pair" to it.pair, "type" to it.type, "ordertype" to "limit", "price" to it.rate,
                     "volume" to it.amount, "userref" to it.id)
 
@@ -159,7 +147,8 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         return getUrl("Balance").let {
             (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it))) as JSONObject)?.let {
                 (it["result"] as Map<*, *>)
-                        .map { it.key.toString() to BigDecimal(it.value.toString()) }.toMap()
+                        .map { getRutCurrency(it.key.toString()) to BigDecimal(it.value.toString()) }
+                        .filter { state.currencies.containsKey(it.first) }.toMap()
             }
         }
     }
@@ -291,11 +280,18 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     }
 
     fun isKeyKontainValue(map: Map<String, *>, value: String): Boolean{
-        map.forEach{
+        map.forEach {
             if(value.contains(it.key + "_")){
                 return true
             }
         }
         return false
+    }
+
+    companion object {
+        val Pairs = listOf(
+                RutData.P(C.btc, C.usd),
+                RutData.P(C.ltc, C.btc)
+        )
     }
 }

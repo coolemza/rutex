@@ -217,4 +217,59 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
             } ?: return Pair(0L, WithdrawStatus.FAILED)
         }
     }
+
+    companion object {
+        val Pairs = listOf(
+                RutData.P(C.bch, C.btc),
+                RutData.P(C.bch, C.dsh),
+                RutData.P(C.bch, C.eth),
+                RutData.P(C.bch, C.eur),
+                RutData.P(C.bch, C.ltc),
+                RutData.P(C.bch, C.rur),
+                RutData.P(C.bch, C.usd),
+                RutData.P(C.bch, C.zec),
+
+                RutData.P(C.btc, C.eur),
+                RutData.P(C.btc, C.rur),
+                RutData.P(C.btc, C.usd),
+
+                RutData.P(C.dsh, C.btc),
+                RutData.P(C.dsh, C.eth),
+                RutData.P(C.dsh, C.eur),
+                RutData.P(C.dsh, C.ltc),
+                RutData.P(C.dsh, C.rur),
+                RutData.P(C.dsh, C.usd),
+                RutData.P(C.dsh, C.zec),
+
+                RutData.P(C.eth, C.btc),
+                RutData.P(C.eth, C.eur),
+                RutData.P(C.eth, C.ltc),
+                RutData.P(C.eth, C.rur),
+                RutData.P(C.eth, C.usd),
+                RutData.P(C.eth, C.zec),
+
+                RutData.P(C.eur, C.rur),
+                RutData.P(C.eur, C.usd),
+
+                RutData.P(C.ltc, C.btc),
+                RutData.P(C.ltc, C.eur),
+                RutData.P(C.ltc, C.rur),
+                RutData.P(C.ltc, C.usd),
+
+                RutData.P(C.nmc, C.btc),
+                RutData.P(C.nmc, C.usd),
+
+                RutData.P(C.nvc, C.btc),
+                RutData.P(C.nvc, C.usd),
+
+                RutData.P(C.ppc, C.btc),
+                RutData.P(C.ppc, C.usd),
+
+                RutData.P(C.usd, C.rur),
+
+                RutData.P(C.zec, C.btc),
+                RutData.P(C.zec, C.ltc),
+                RutData.P(C.zec, C.usd)
+        )
+    }
 }
