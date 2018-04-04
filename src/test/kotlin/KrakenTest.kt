@@ -12,16 +12,17 @@ class KrakenTest {
     @Test
     fun testWallet() {
         val wallet = stock.getBalance()!!
+       // wallet.containsKey(C.ltc)
         wallet shouldHaveKey "ltc"
     }
 
     @Test
     fun testDepth() {
         val depth = stock.getDepth(null, null)
-        var status: Boolean = true
+        var status = true
 
         depth?.forEach{
-            (it.value as Map<String, *>).forEach{
+            (it.value as Map<*, *>).forEach{
                 if(!((it.key as BookType).toString().trim().contains("bids") || (it.key as BookType).toString().trim().contains("asks")))
                     status = false
             }
@@ -38,23 +39,23 @@ class KrakenTest {
     @Test
     fun testOrderLiveCycle() {
         val theOrder = Order("Kraken", "sell", "ltcusd", BigDecimal.valueOf(270), BigDecimal.valueOf(0.1)).apply { orderId = id }
-        var listOrders = mutableListOf<Order>(theOrder)
+        val listOrders = mutableListOf<Order>(theOrder)
 
         stock.state.activeList.addAll(listOrders)
         stock.putOrders(listOrders)
-        var orderAfterCreate = stock.state.activeList.filter { it.id == orderId }.first()
+        val orderAfterCreate = stock.state.activeList.filter { it.id == orderId }.first()
 
 
         listOrders.clear()
         listOrders.add(orderAfterCreate)
         stock.cancelOrders(listOrders)
-        var orderAfterCancellation = stock.state.activeList.find { it.id == orderId }
+        val orderAfterCancellation = stock.state.activeList.find { it.id == orderId }
 
         assert(orderAfterCancellation == null)
     }
 
-    @Test
+/*    @Test
     fun testHistory() {
         stock.updateHistory(2) is Long
-    }
+    }*/
 }
