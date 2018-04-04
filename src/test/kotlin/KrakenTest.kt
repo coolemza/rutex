@@ -58,9 +58,4 @@ class KrakenTest {
     fun testHistory() {
         assert(stock.updateHistory(2) > 0)
     }
-
-/*    @Test
-    fun testHistory() {
-        stock.updateHistory(2) is Long
-    }*/
 }

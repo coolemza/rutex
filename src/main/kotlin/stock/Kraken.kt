@@ -159,7 +159,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
 
     override fun getBalance(): Map<String, BigDecimal>? {
         return getUrl("Balance").let {
-            (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it))) as JSONObject)?.let {
+            (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it))))?.let {
                 (it["result"] as Map<*, *>)
                         .map { getRutCurrency(it.key.toString()) to BigDecimal(it.value.toString()) }
                         .filter { state.currencies.containsKey(it.first) }.toMap()
