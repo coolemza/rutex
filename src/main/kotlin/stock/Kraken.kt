@@ -61,16 +61,20 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
             getUrl("CancelOrder").let {
                 ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getTradesKey().first(), it, params)))
             }?.also {
-                when(((it["result"] as Map<*, *>)["count"]) as Long){
-                    1L -> state.onActive(currentOrder.id, currentOrder.order_id, currentOrder.amount, OrderStatus.CANCELED)
-                    else -> state.log.error("Order cancellation failed.")
+                if (isNoError(it)) {
+                    when (((it["result"] as Map<*, *>)["count"]) as Long) {
+                        1L -> state.onActive(currentOrder.id, currentOrder.order_id, currentOrder.amount, OrderStatus.CANCELED)
+                        else -> state.log.error("Order cancellation failed.")
+                    }
+                } else {
+                    state.log.error("Error is appearance. Status error: ${it["error"].toString()}")
                 }
             } ?: state.log.error("CancelOrder response failed.")
         }
     }
 
     override fun putOrders(orders: List<Order>) {
-        orders.forEach{
+        orders.forEach {
             val currOrder = it
             val params = mapOf("pair" to it.pair, "type" to it.type, "ordertype" to "limit", "price" to it.rate,
                     "volume" to it.amount, "userref" to it.id)
@@ -79,22 +83,26 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
             getUrl("AddOrder").let {
                 ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getTradesKey().first(), it, params)))
             }?.also {
-                val ret = (it["result"] as Map<*, *>)
-                val transactionId: String = (ret["txid"] as JSONArray).first() as String
-                val orderDescription = (ret["descr"] as Map<*, *>)
-                val remaining = (orderDescription["order"] as String).split(" ")[1].toBigDecimal()
+                if (isNoError(it)) {
+                    val ret = (it["result"] as Map<*, *>)
+                    val transactionId: String = (ret["txid"] as JSONArray).first() as String
+                    val orderDescription = (ret["descr"] as Map<*, *>)
+                    val remaining = (orderDescription["order"] as String).split(" ")[1].toBigDecimal()
 
-                state.log.info(" thread id: ${Thread.currentThread().id} trade ok: remaining: $remaining  transaction_id: $transactionId")
+                    state.log.info(" thread id: ${Thread.currentThread().id} trade ok: remaining: $remaining  transaction_id: $transactionId")
 
-                var status: OrderStatus = OrderStatus.COMPLETED
-                if(orderDescription["close"] == null){
-                    status = if (currOrder.amount > remaining)
-                        OrderStatus.PARTIAL
-                    else
-                        OrderStatus.ACTIVE
+                    var status: OrderStatus = OrderStatus.COMPLETED
+                    if (orderDescription["close"] == null) {
+                        status = if (currOrder.amount > remaining)
+                            OrderStatus.PARTIAL
+                        else
+                            OrderStatus.ACTIVE
+                    }
+
+                    state.onActive(currOrder.id, currOrder.order_id, currOrder.remaining - remaining, status, false)
+                } else {
+                    state.log.error("Error is appearance. Status error: ${it["error"].toString()}")
                 }
-
-                state.onActive(currOrder.id, currOrder.order_id, currOrder.remaining - remaining, status, false)
             } ?: state.log.error("OrderPut response failed: $currOrder")
         }
     }
@@ -104,15 +112,19 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
 
         getUrl("QueryOrders").let {
             ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getTradesKey().first(), it, params)))?.also {
-                val res = (it["result"] as Map<*, *>).values.first() as Map<*, *>
-                val partialAmount = BigDecimal(res["vol"].toString())
-                val status = if (res["status"].toString().equals("open")) {
-                    if (order.amount > partialAmount) OrderStatus.PARTIAL else OrderStatus.ACTIVE
-                } else
-                    OrderStatus.COMPLETED
+                if (isNoError(it)) {
+                    val res = (it["result"] as Map<*, *>).values.first() as Map<*, *>
+                    val partialAmount = BigDecimal(res["vol"].toString())
+                    val status = if (res["status"].toString().equals("open")) {
+                        if (order.amount > partialAmount) OrderStatus.PARTIAL else OrderStatus.ACTIVE
+                    } else
+                        OrderStatus.COMPLETED
 
-                order.takeIf { it.status != status || it.remaining.compareTo(partialAmount) != 0 }
-                        ?.let { state.onActive(it.id, it.order_id, it.remaining - partialAmount, status, updateTotal) }
+                    order.takeIf { it.status != status || it.remaining.compareTo(partialAmount) != 0 }
+                            ?.let { state.onActive(it.id, it.order_id, it.remaining - partialAmount, status, updateTotal) }
+                } else {
+                    state.log.error("Error is appearance. Status error: ${it["error"].toString()}")
+                }
             } ?: state.log.error("OrderInfo response failed: $order")
         }
     }
@@ -123,18 +135,21 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
 
         state.pairs.keys.forEach({
             ParseResponse(state.SendRequest(getDepthUrl(pairFromRutexToKrakenFormat(it), state.depthLimit.toString())))?.let {
+                if (isNoError(it)) {
+                    @Suppress("UNCHECKED_CAST")
+                    (it["result"] as Map<String, *>).forEach {
+                        val pairName = it.key
 
-                @Suppress("UNCHECKED_CAST")
-                (it["result"] as Map<String, *>).forEach {
-                    val pairName = it.key
-
-                    (it.value as Map<*, *>).forEach {
-                        for (i in 0..(state.depthLimit - 1)) {
-                            val value = ((it.value as List<*>)[i]) as List<*>
-                            update.getOrPut(pairName) { mutableMapOf() }.getOrPut(BookType.valueOf(it.key.toString())) { mutableListOf() }
-                                    .add(i, Depth(value[0].toString(), value[1].toString()))
+                        (it.value as Map<*, *>).forEach {
+                            for (i in 0..(state.depthLimit - 1)) {
+                                val value = ((it.value as List<*>)[i]) as List<*>
+                                update.getOrPut(pairName) { mutableMapOf() }.getOrPut(BookType.valueOf(it.key.toString())) { mutableListOf() }
+                                        .add(i, Depth(value[0].toString(), value[1].toString()))
+                            }
                         }
                     }
+                } else {
+                    state.log.error("Error is appearance. Status error: ${it["error"].toString()}")
                 }
             } ?: state.log.error("GetDepth response failed.")
         })
@@ -164,27 +179,32 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
             getUrl("DepositStatus").let {
                 ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it, params)))
             }?.let {
-                val historyList = it["result"] as JSONArray
+                if (isNoError(it)) {
+                    val historyList = it["result"] as JSONArray
 
-                val total = mutableMapOf<String, BigDecimal>()
-                historyList.forEach {
-                    val current = it as HashMap<*, *>
-                    currentTimeFromFunds = current["time"].toString().toLong()
+                    val total = mutableMapOf<String, BigDecimal>()
+                    historyList.forEach {
+                        val current = it as HashMap<*, *>
+                        currentTimeFromFunds = current["time"].toString().toLong()
 
-                    if(fromId < currentTimeFromFunds) {
-                        val amount = BigDecimal(current["amount"].toString())
+                        if (fromId < currentTimeFromFunds) {
+                            val amount = BigDecimal(current["amount"].toString())
 
-                        state.log.info("found incoming transfer $amount $asset, status: ${it["status"].toString().toLowerCase()}")
+                            state.log.info("found incoming transfer $amount $asset, status: ${it["status"].toString().toLowerCase()}")
 
-                        total.run { put(asset, amount + getOrDefault(asset, BigDecimal.ZERO)) }
+                            total.run { put(asset, amount + getOrDefault(asset, BigDecimal.ZERO)) }
 
-                        if (currentTimeFromFunds > maxTime){
-                            maxTime = currentTimeFromFunds
+                            if (currentTimeFromFunds > maxTime) {
+                                maxTime = currentTimeFromFunds
+                            }
                         }
                     }
-                }
 
-                total.takeIf { it.isNotEmpty() }?.forEach { state.onWalletUpdate(plus = Pair(it.key, it.value)) }
+                    total.takeIf { it.isNotEmpty() }?.forEach { state.onWalletUpdate(plus = Pair(it.key, it.value)) }
+
+                } else {
+                    state.log.error("Error is appearance. Status error: ${it["error"].toString()}")
+                }
             } ?: state.log.error("UpdateHistory response failed.")
         }
 
@@ -233,15 +253,21 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     }
 
     override fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): Pair<Long, WithdrawStatus> {
-        val data = mapOf("amount" to amount.toPlainString(), "asset" to crossCur.toUpperCase(), "key" to address.first)
+        val data = mapOf("amount" to amount.toPlainString(), "asset" to crossCur.toUpperCase(), "key111" to address.first)
 
         getUrl("Withdraw").let {
             ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data)))
         }?.let {
-            val txId: String = (it["result"] as Map<*, *>)["refid"] as String
-            val txHash: Long = txId.hashCode().toLong()
+            if(isNoError(it)){
+                val txId: String = (it["result"] as Map<*, *>)["refid"] as String
+                val txHash: Long = txId.hashCode().toLong()
 
-            return Pair(txHash, WithdrawStatus.SUCCESS)
+                return Pair(txHash, WithdrawStatus.SUCCESS)
+            } else {
+                state.log.error("Error is appearance. Status error: ${it["error"].toString()}")
+                return Pair(0L, WithdrawStatus.FAILED)
+            }
+
         } ?: return Pair(0L, WithdrawStatus.FAILED)
 
     }
@@ -279,9 +305,5 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         )
     }
 
-    private fun isError(obj: JSONObject){
-        if (obj.containsKey("error") && (obj["error"] != null && arrayOf(obj["error"]).isEmpty())) {
-            state.log.error(obj["error"].toString()) // вынести отсюда
-        }
-    }
+    private fun isNoError(obj: JSONObject) = obj.containsKey("error") && (obj["error"] != null && arrayOf(obj["error"]).isEmpty())
 }
