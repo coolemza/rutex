@@ -305,6 +305,5 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         )
     }
 
-    //private fun isNoError(obj: JSONObject) = (obj["error"] == null || arrayOf(obj["error"] as JSONArray).isEmpty())
     private fun isNoError(obj: JSONObject) = (obj["error"] as JSONArray).isEmpty()
 }
