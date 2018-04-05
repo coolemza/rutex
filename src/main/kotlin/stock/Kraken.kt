@@ -6,6 +6,7 @@ import data.Depth
 import data.DepthBook
 import data.Order
 import database.*
+import database.RutData.P
 import kotlinx.coroutines.experimental.Deferred
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
@@ -38,7 +39,6 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         "DASH" -> C.dsh
         else -> C.valueOf(cur.toLowerCase())
     }.toString()
-
 
     fun info(): Map<String, PairInfo>? {
         val htmlList = Jsoup.connect(minimunOrderSizePageUrl())
@@ -258,7 +258,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         getUrl("Withdraw").let {
             ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data)))
         }?.let {
-            if(isNoError(it)){
+            if(this.isNoError(it)){
                 val txId: String = (it["result"] as Map<*, *>)["refid"] as String
                 val txHash: Long = txId.hashCode().toLong()
 
@@ -300,8 +300,65 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
 
     companion object {
         val Pairs = listOf(
-                RutData.P(C.btc, C.usd),
-                RutData.P(C.ltc, C.btc)
+                P(C.btc, C.usd),
+                P(C.ltc, C.btc),
+                P(C.bch, C.eur),
+                P(C.bch, C.usd),
+                P(C.bch, C.btc),
+                P(C.dsh, C.eur),
+                P(C.dsh, C.usd),
+                P(C.dsh, C.btc),
+                P(C.eos, C.eth),
+                P(C.eos, C.eur),
+                P(C.eos, C.usd),
+                P(C.eos, C.btc),
+                P(C.gno, C.eth),
+                P(C.gno, C.eur),
+                P(C.gno, C.usd),
+                P(C.gno, C.btc),
+                P(C.usdt, C.usd),
+                P(C.etc, C.eth),
+                P(C.etc, C.btc),
+                P(C.etc, C.eur),
+                P(C.etc, C.usd),
+                P(C.eth, C.btc),
+                P(C.eth, C.cad),
+                P(C.eth, C.eur),
+                P(C.eth, C.gbp),
+                P(C.eth, C.jpy),
+                P(C.eth, C.usd),
+                P(C.icn, C.eth),
+                P(C.icn, C.btc),
+                P(C.ltc, C.btc),
+                P(C.ltc, C.eur),
+                P(C.ltc, C.usd),
+                P(C.mln, C.eth),
+                P(C.mln, C.btc),
+                P(C.rep, C.eth),
+                P(C.rep, C.btc),
+                P(C.rep, C.eur),
+                P(C.rep, C.usd),
+                P(C.btc, C.cad),
+                P(C.btc, C.eur),
+                P(C.btc, C.gbp),
+                P(C.btc, C.jpy),
+                P(C.btc, C.usd),
+                P(C.xdg, C.btc),
+                P(C.xlm, C.btc),
+                P(C.xlm, C.eur),
+                P(C.xlm, C.usd),
+                P(C.xmr, C.btc),
+                P(C.xmr, C.eur),
+                P(C.xmr, C.usd),
+                P(C.xrp, C.btc),
+                P(C.xrp, C.cad),
+                P(C.xrp, C.eur),
+                P(C.xrp, C.jpy),
+                P(C.xrp, C.usd),
+                P(C.zec, C.btc),
+                P(C.zec, C.eur),
+                P(C.zec, C.jpy),
+                P(C.zec, C.usd)
         )
     }
 

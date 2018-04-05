@@ -13,6 +13,7 @@ data class RutKeys(val keys: Map<String, List<Key>>)
 enum class C {
     bch,
     btc,
+    cad,
     cnh,
     doge,
     dsh,
@@ -24,6 +25,7 @@ enum class C {
     gno,
     icn,
     iota,
+    jpy,
     ltc,
     mln,
     nmc,
@@ -36,6 +38,7 @@ enum class C {
     san,
     usd,
     usdt,
+    xdg,
     xlm,
     xmr,
     xrp,
