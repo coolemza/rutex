@@ -32,11 +32,6 @@ class KrakenTest {
     }
 
     @Test
-    fun testInfo() {
-        stock.info()
-    }
-
-    @Test
     fun testOrderLiveCycle() {
         val theOrder = Order("Kraken", "sell", "ltcusd", BigDecimal.valueOf(270), BigDecimal.valueOf(0.1)).apply { orderId = id }
         val listOrders = mutableListOf<Order>(theOrder)

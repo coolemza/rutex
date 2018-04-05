@@ -253,7 +253,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     }
 
     override fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): Pair<Long, WithdrawStatus> {
-        val data = mapOf("amount" to amount.toPlainString(), "asset" to crossCur.toUpperCase(), "key111" to address.first)
+        val data = mapOf("amount" to amount.toPlainString(), "asset" to crossCur.toUpperCase(), "key" to address.first)
 
         getUrl("Withdraw").let {
             ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data)))
@@ -305,5 +305,6 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         )
     }
 
-    private fun isNoError(obj: JSONObject) = obj.containsKey("error") && (obj["error"] != null && arrayOf(obj["error"]).isEmpty())
+    //private fun isNoError(obj: JSONObject) = (obj["error"] == null || arrayOf(obj["error"] as JSONArray).isEmpty())
+    private fun isNoError(obj: JSONObject) = (obj["error"] as JSONArray).isEmpty()
 }
