@@ -313,63 +313,156 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         val Pairs = listOf(
                 P(C.btc, C.usd),
                 P(C.ltc, C.btc),
+
                 P(C.bch, C.eur),
                 P(C.bch, C.usd),
                 P(C.bch, C.btc),
+
                 P(C.dsh, C.eur),
                 P(C.dsh, C.usd),
                 P(C.dsh, C.btc),
+
                 P(C.eos, C.eth),
                 P(C.eos, C.eur),
                 P(C.eos, C.usd),
                 P(C.eos, C.btc),
+
                 P(C.gno, C.eth),
                 P(C.gno, C.eur),
                 P(C.gno, C.usd),
                 P(C.gno, C.btc),
+
                 P(C.usdt, C.usd),
+
                 P(C.etc, C.eth),
                 P(C.etc, C.btc),
                 P(C.etc, C.eur),
                 P(C.etc, C.usd),
+
                 P(C.eth, C.btc),
                 P(C.eth, C.cad),
                 P(C.eth, C.eur),
                 P(C.eth, C.gbp),
                 P(C.eth, C.jpy),
                 P(C.eth, C.usd),
+
                 P(C.icn, C.eth),
                 P(C.icn, C.btc),
+
                 P(C.ltc, C.btc),
                 P(C.ltc, C.eur),
                 P(C.ltc, C.usd),
+
                 P(C.mln, C.eth),
                 P(C.mln, C.btc),
+
                 P(C.rep, C.eth),
                 P(C.rep, C.btc),
                 P(C.rep, C.eur),
                 P(C.rep, C.usd),
+
                 P(C.btc, C.cad),
                 P(C.btc, C.eur),
                 P(C.btc, C.gbp),
                 P(C.btc, C.jpy),
                 P(C.btc, C.usd),
+
                 P(C.xdg, C.btc),
+
                 P(C.xlm, C.btc),
                 P(C.xlm, C.eur),
                 P(C.xlm, C.usd),
+
                 P(C.xmr, C.btc),
                 P(C.xmr, C.eur),
                 P(C.xmr, C.usd),
+
                 P(C.xrp, C.btc),
                 P(C.xrp, C.cad),
                 P(C.xrp, C.eur),
                 P(C.xrp, C.jpy),
                 P(C.xrp, C.usd),
+
                 P(C.zec, C.btc),
                 P(C.zec, C.eur),
                 P(C.zec, C.jpy),
                 P(C.zec, C.usd)
+        )
+
+        val PairsKrakenRutex = listOf(
+                Pair("BCHEUR", "bch_eur"),
+                Pair("BCHUSD", "bch_usd"),
+                Pair("BCHXBT", "bch_btc"),
+
+                Pair("DASHEUR", "dsh_eur"),
+                Pair("DASHUSD", "dsh_eur"),
+                Pair("DASHXBT", "dsh_btc"),
+
+                Pair("EOSETH", "eos_eth"),
+                Pair("EOSEUR", "eos_eur"),
+                Pair("EOSUSD", "eos_usd"),
+                Pair("EOSXBT", "eos_btc"),
+
+                Pair("GNOETH", "gno_eth"),
+                Pair("GNOEUR", "gno_eur"),
+                Pair("GNOUSD", "gno_usd"),
+                Pair("GNOXBT", "gno_btc"),
+
+                Pair("USDTUSD", "usdt_usd"),
+
+                Pair("XETCXETH", "etc_eth"),
+                Pair("XETCXXBT", "etc_btc"),
+                Pair("XETCZEUR", "etc_eur"),
+                Pair("XETCZUSD", "etc_usd"),
+
+                Pair("XETHXXBT", "eth_btc"),
+                Pair("XETHZCAD", "eth_cad"),
+                Pair("XETHZEUR", "eth_eur"),
+                Pair("XETHZGBP", "eth_gbp"),
+                Pair("XETHZJPY", "eth_jpy"),
+                Pair("XETHZUSD", "eth_usd"),
+
+                Pair("XICNXETH", "icn_eth"),
+                Pair("XICNXXBT", "icn_btc"),
+
+                Pair("XLTCXXBT", "ltc_btc"),
+                Pair("XLTCZEUR", "ltc_eur"),
+                Pair("XLTCZUSD", "ltc_usd"),
+
+                Pair("XMLNXETH", "mln_eth"),
+                Pair("XMLNXXBT", "mln_btc"),
+
+                Pair("XREPXETH", "rep_eth"),
+                Pair("XREPXXBT", "rep_btc"),
+                Pair("XREPZEUR", "rep_eur"),
+                Pair("XREPZUSD", "rep_usd"),
+
+                Pair("XXBTZCAD", "btc_cad"),
+                Pair("XXBTZEUR", "btc_eur"),
+                Pair("XXBTZGBP", "btc_gbp"),
+                Pair("XXBTZJPY", "btc_jpy"),
+                Pair("XXBTZUSD", "btc_usd"),
+
+                Pair("XXDGXXBT", "xdg_btc"),
+
+                Pair("XXLMXXBT", "xlm_btc"),
+                Pair("XXLMZEUR", "xlm_eur"),
+                Pair("XXLMZUSD", "xlm_usd"),
+
+                Pair("XXMRXXBT", "xmr_btc"),
+                Pair("XXMRZEUR", "xmr_eur"),
+                Pair("XXMRZUSD", "xmr_usd"),
+
+                Pair("XXRPXXBT", "xrp_btc"),
+                Pair("XXRPZCAD", "xrp_cad"),
+                Pair("XXRPZEUR", "xrp_eur"),
+                Pair("XXRPZJPY", "xrp_jpy"),
+                Pair("XXRPZUSD", "xrp_usd"),
+
+                Pair("XZECXXBT", "zec_btc"),
+                Pair("XZECZEUR", "zec_eur"),
+                Pair("XZECZJPY", "zec_jpy"),
+                Pair("XZECZUSD", "zec_usd")
         )
     }
 
