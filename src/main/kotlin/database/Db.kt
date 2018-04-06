@@ -3,6 +3,7 @@ package database
 import com.github.salomonbrys.kodein.Kodein
 import com.github.salomonbrys.kodein.KodeinAware
 import com.github.salomonbrys.kodein.instance
+import data.DepthBook
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import stock.Update
@@ -114,16 +115,36 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
 
     override fun getStockInfo(name: String) = stocks[name]!!
 
-    override fun saveBook(stockId: Int, update: List<Update>, time: LocalDateTime, pairs: Map<String, PairInfo>) {
-        transaction {
-            Rates.batchInsert(update)
-            {
-                this[Rates.date] = local2joda(time).toDateTime()
-                this[Rates.type] = it.type
-                this[Rates.stock_id] = stockId
-                this[Rates.pair_id] = pairs[it.pair]!!.pairId
-                this[Rates.rate] = it.rate
-                this[Rates.amount] = it.amount
+    override fun saveBook(stockId: Int, time: LocalDateTime, update: List<Update>?, fullState: DepthBook?) {
+        fullState?.let {
+            data class BookData(val stockId: Int, val pairId: Int, val type: BookType, val rate: BigDecimal, val amount: BigDecimal)
+
+            val cc = it.pairs.map { (pair, p) -> p.map { (type, t) -> t.map { BookData(stockId, pairs[pair]!!, type, it.rate, it.amount) } } }
+                    .reduce { a, b -> a + b }.reduce { a, b -> a + b }
+            transaction {
+                Rates.batchInsert(cc)
+                {
+                    this[Rates.date] = local2joda(time).toDateTime()
+                    this[Rates.type] = it.type
+                    this[Rates.stock_id] = stockId
+                    this[Rates.pair_id] = it.pairId
+                    this[Rates.rate] = it.rate
+                    this[Rates.amount] = it.amount
+                    this[Rates.full] = true
+                }
+            }
+        }
+        update?.let {
+            transaction {
+                Rates.batchInsert(it)
+                {
+                    this[Rates.date] = local2joda(time).toDateTime()
+                    this[Rates.type] = it.type
+                    this[Rates.stock_id] = stockId
+                    this[Rates.pair_id] = pairs[it.pair]!!
+                    this[Rates.rate] = it.rate
+                    this[Rates.amount] = it.amount
+                }
             }
         }
     }

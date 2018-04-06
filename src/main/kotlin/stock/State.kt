@@ -11,10 +11,8 @@ import database.IDb
 import database.KeyType
 import database.OrderStatus
 import database.WalletType
-import kotlinx.coroutines.experimental.Deferred
-import kotlinx.coroutines.experimental.cancelAndJoin
-import kotlinx.coroutines.experimental.launch
-import kotlinx.coroutines.experimental.runBlocking
+import kotlinx.coroutines.experimental.*
+import kotlinx.coroutines.experimental.sync.withLock
 import okhttp3.*
 import utils.getRollingLogger
 import utils.sumByDecimal
@@ -30,6 +28,8 @@ class State(val name: String, override val kodein: Kodein): KodeinAware {
 
     var depthLimit = 5
     val log = getRollingLogger(name, Level.DEBUG)
+
+    val commonContext = CommonPool + CoroutineExceptionHandler { _, e -> log.error(e.message, e) }
 
     val info = db.getStockInfo(name)
     val id = info.id
@@ -67,23 +67,31 @@ class State(val name: String, override val kodein: Kodein): KodeinAware {
     fun getLocked(orderList: MutableList<Order> = activeList) =  orderList.groupBy { it.getLockCur() }
             .map { it.key to it.value.sumByDecimal { it.getLockAmount() } }.toMap()
 
-    fun OnStateUpdate(update: List<Update>): Boolean {
+    suspend fun OnStateUpdate(update: List<Update>? = null, fullState: DepthBook? = null): Boolean {
         val time = LocalDateTime.now()
         stateTime = time
 
-        update.forEach { upd ->
-            val err = upd.amount?.let { depthBook.updateRate(upd.pair, upd.type, upd.rate, it) } ?: depthBook.removeRate(upd.pair, upd.type, upd.rate)
-            err?.let {
-                log.error(err)
-                return false
+        RutEx.stateLock.withLock {
+            fullState?.also { launch(commonContext) { db.saveBook(id, time, fullState = it) } }?.let {
+                depthBook.replace(it)
+                updated.replace(it)
             }
-            updated.getOrPut(upd.pair) { mutableMapOf() }.getOrPut(upd.type) { mutableListOf() }
-                    .add(0, Depth(upd.rate, upd.amount ?: BigDecimal.ZERO))
+
+            update?.also { launch(commonContext) { db.saveBook(id, time, it) } }?.forEach { upd ->
+                if (depthBook.pairs[upd.pair]!![upd.type]!!.size < 2) {
+                    log.error("size < 2, pair: ${upd.pair}")
+                } else {
+                    if (!(if (upd.amount == null) depthBook.removeRate(upd) else depthBook.updateRate(upd))) {
+                        log.error("rate not found $upd")
+                        return@withLock null
+                    }
+
+                    updated.pairs.getOrPut(upd.pair) { mutableMapOf() }.getOrPut(upd.type) { mutableListOf() }
+                            .add(0, Depth(upd.rate, upd.amount ?: BigDecimal.ZERO))
+                }
+            }
         }
-
-        launch { db.saveBook(id, update, time, pairs) }
-
-        updated.clear()
+        updated.pairs.clear()
         return true
     }
 

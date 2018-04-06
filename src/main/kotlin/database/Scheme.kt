@@ -26,11 +26,12 @@ object Stocks: Table() {
 
 object Rates: Table() {
     val date = datetime("date")
-    val stock_id = integer("stock_id") references Stocks.id
-    val pair_id = integer("pair_id") references Pairs.id
+    val stock_id = integer("stock_id")
+    val pair_id = integer("pair_id")
     val type = enumeration("type", BookType::class.java)
     val rate = decimal("rate", 20, 8)
     val amount = decimal("amount", 20, 8).nullable()
+    val full = bool("full").default(false)
 }
 
 object Wallet: Table() {

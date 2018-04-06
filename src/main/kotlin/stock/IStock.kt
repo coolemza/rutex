@@ -3,10 +3,8 @@ package stock
 import data.DepthBook
 import data.Order
 import database.*
-import kotlinx.coroutines.experimental.NonCancellable
-import kotlinx.coroutines.experimental.async
-import kotlinx.coroutines.experimental.delay
-import kotlinx.coroutines.experimental.newSingleThreadContext
+import kotlinx.coroutines.experimental.*
+import kotlinx.coroutines.experimental.sync.withLock
 import utils.getUpdate
 import java.math.BigDecimal
 import java.util.concurrent.ConcurrentMap
@@ -27,49 +25,65 @@ interface IStock {
     fun getOrderInfo(order: Order, updateTotal: Boolean = true)
     fun putOrders(orders: List<Order>)
     fun cancelOrders(orders: List<Order>)
-    fun start()
+    suspend fun start()
     fun stop()
     fun updateHistory(fromId: Long): Long
     fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): Pair<Long, WithdrawStatus>
 
-    fun debugWallet(debugWallet: ConcurrentMap<String, BigDecimal>) = async(newSingleThreadContext("stockWallet")) {
+    fun debugWallet(debugWallet: ConcurrentMap<String, BigDecimal>) = launch {
         while (isActive) {
-            kotlinx.coroutines.experimental.run(NonCancellable) {
-                getBalance()?.let { debugWallet.putAll(it) }
+            try {
+                withContext(NonCancellable) {
+                    getBalance()?.let { debugWallet.putAll(it) }
+                }
+            } catch (e: Exception) {
+                state.log.error(e.message, e)
             }
             delay(10, TimeUnit.SECONDS)
         }
     }
 
-    fun depth() = async(newSingleThreadContext("Depth")) {
+    fun depth(pair: String? = null) = launch {
         val stateNew = DepthBook()
         val stateCur = DepthBook()
-        while (isActive) {
-            stateNew.clear()
-            getDepth(stateNew)?.let {
-                getUpdate(stateCur, it, state.depthLimit)?.let {
-                    stateCur.replace(stateNew)
-                    state.OnStateUpdate(it)
-                }
+
+        while (stateNew.pairs.isEmpty()) {
+            getDepth(stateNew, pair)?.let {
+                stateCur.replace(stateNew)
+                state.OnStateUpdate(fullState = stateNew)
             }
-            delay(100)
+        }
+
+        while (isActive) {
+            try {
+                stateNew.pairs.clear()  //TODO: reset socket state on error
+                getDepth(stateNew, pair)?.let {
+                    getUpdate(stateCur, it)?.let {
+                        state.OnStateUpdate(it)
+                        stateCur.replace(stateNew)
+                    }
+                }
+            } catch (e: Exception) {
+                state.log.error(e.message, e)
+            }
+            delay(1, TimeUnit.NANOSECONDS)
         }
     }
 
-    fun active(activeList: MutableList<Order>) = async(newSingleThreadContext("Active")) {
+    fun active(activeList: MutableList<Order>) = launch {
         while (isActive) {
-            RutEx.stateLock.read { activeList.filter { it.order_id != 0L } }.forEach {
-                kotlinx.coroutines.experimental.run(NonCancellable) {
+            RutEx.stateLock.withLock { activeList.filter { it.order_id != 0L } }.forEach {
+                withContext(NonCancellable) {
                     getOrderInfo(it)
                 }
             }
         }
     }
 
-    fun history(lastId: Long, delaySeconds: Long, stockId: Int) = async(newSingleThreadContext("History")) {
+    fun history(lastId: Long, delaySeconds: Long, stockId: Int) = launch {
         var historyLastId = lastId
         while (isActive) {
-            kotlinx.coroutines.experimental.run(NonCancellable) {
+            withContext(NonCancellable) {
                 updateHistory(historyLastId).takeIf { it > historyLastId }
                         ?.also { state.db.saveHistoryId(it, stockId) }?.also { historyLastId = it }
             }
@@ -77,16 +91,16 @@ interface IStock {
         }
     }
 
-    fun info(func: () -> Map<String, PairInfo>?, delayMinutes: Long, stockName: String, pairs: Map< String, PairInfo>) = async(newSingleThreadContext("info")) {
+    fun info(func: () -> Map<String, PairInfo>?, delayMinutes: Long, stockName: String, pairs: Map< String, PairInfo>) = launch {
         val lastPair = state.db.getStockPairs(stockName)
         while (isActive) {
-            kotlinx.coroutines.experimental.run(NonCancellable) {
+            withContext(NonCancellable) {
                 func()?.let {
                     val newList = it.filter { it.value.minAmount.compareTo(lastPair[it.key]!!.minAmount) != 0 }
                     if (newList.isNotEmpty()) {
                         state.db.updateStockPairs(newList, stockName)
                         newList.forEach { lastPair[it.key]!!.minAmount = it.value.minAmount }
-                        RutEx.stateLock.write { newList.forEach { pairs[it.key]!!.minAmount = it.value.minAmount } }
+                        RutEx.stateLock.withLock { newList.forEach { pairs[it.key]!!.minAmount = it.value.minAmount } }
                     }
                 }
             }

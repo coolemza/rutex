@@ -8,6 +8,8 @@ import data.Order
 import database.*
 import database.RutData.P
 import kotlinx.coroutines.experimental.Deferred
+import kotlinx.coroutines.experimental.Job
+import kotlinx.coroutines.experimental.launch
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
@@ -25,10 +27,10 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     override val state = State(this::class.simpleName!!, kodein)
     private var tm = TradeManager(state)
     private val statePool = Executors.newScheduledThreadPool(1)
-    private val coroutines = mutableListOf<Deferred<Unit>>()
+    private val coroutines = mutableListOf<Job>()
 
     private fun getUrl(cmd: String) = mapOf("https://api.kraken.com/0/private/$cmd" to "/0/private/$cmd")
-    private fun getDepthUrl(currentPair: String, limit: String) = "https://api.kraken.com/0/public/Depth?pair=$currentPair&count=$limit"
+    private fun getDepthUrl(pair: String) = "https://api.kraken.com/0/public/Depth?pair=$pair&count=${state.depthLimit}"
 
     private fun browserEmulationString() = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.152 Safari/537.36"
     private fun minimunOrderSizePageUrl() = "https://support.kraken.com/hc/en-us/articles/205893708-What-is-the-minimum-order-size"
@@ -133,39 +135,46 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     override fun getDepth(updateTo: DepthBook?, pair: String?): DepthBook? {
         val update = updateTo ?: DepthBook()
 
-        state.pairs.keys.forEach({
-            ParseResponse(state.SendRequest(getDepthUrl(pairFromRutexToKrakenFormat(it), state.depthLimit.toString())))?.let {
-                if (isNoError(it)) {
-                    @Suppress("UNCHECKED_CAST")
-                    (it["result"] as Map<String, *>).forEach {
-                        val pairName = it.key
+        ParseResponse(state.SendRequest(getDepthUrl(pairFromRutexToKrakenFormat(pair!!))))?.let {
+            if (isNoError(it)) {
+                (it["result"] as Map<String, *>).forEach {
+                    val pairName = it.key
 
-                        (it.value as Map<*, *>).forEach {
-                            for (i in 0..(state.depthLimit - 1)) {
-                                val value = ((it.value as List<*>)[i]) as List<*>
-                                update.getOrPut(pairName) { mutableMapOf() }.getOrPut(BookType.valueOf(it.key.toString())) { mutableListOf() }
-                                        .add(i, Depth(value[0].toString(), value[1].toString()))
-                            }
+                    (it.value as Map<*, *>).forEach {
+                        for (i in 0..(state.depthLimit - 1)) {
+                            val value = ((it.value as List<*>)[i]) as List<*>
+                            update.pairs.getOrPut(pairName) { mutableMapOf() }.getOrPut(BookType.valueOf(it.key.toString())) { mutableListOf() }
+                                    .add(i, Depth(value[0].toString(), value[1].toString()))
                         }
                     }
-                } else {
-                    state.log.error("Error is appearance. Status error: ${it["error"].toString()}")
                 }
-            } ?: state.log.error("GetDepth response failed.")
-        })
+            } else {
+                state.log.error("Error is appearance. Status error: ${it["error"].toString()}")
+            }
+        } ?: state.log.error("GetDepth response failed.")
 
         return update
     }
 
     override fun getBalance(): Map<String, BigDecimal>? {
         return getUrl("Balance").let {
-            (ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it))))?.let {
+            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it)))?.let {
                 (it["result"] as Map<*, *>)
                         .map { getRutCurrency(it.key.toString()) to BigDecimal(it.value.toString()) }
                         .filter { state.currencies.containsKey(it.first) }.toMap()
             }
         }
     }
+
+//    override fun getBalance(): Map<String, BigDecimal>? {
+//        return getUrl("getInfo").let {
+//            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it)))?.let {
+//                ((it["return"] as Map<*, *>)["funds"] as Map<*, *>)
+//                        .filter { state.currencies.containsKey(it.key.toString()) }
+//                        .map { it.key.toString() to BigDecimal(it.value.toString()) }.toMap()
+//            }
+//        }
+//    }
 
     override fun updateHistory(fromId: Long): Long {
         var maxTime = 0L
@@ -240,10 +249,12 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
         }
     }
 
-    override fun start() {
+    suspend override fun start() {
         syncWallet()
-        coroutines.addAll(listOf(active(state.activeList), depth(), history(state.lastHistoryId, 2, 1),
+        state.pairs.forEach { coroutines.add(depth(it.key)) }
+        coroutines.addAll(listOf(active(state.activeList), history(state.lastHistoryId, 2, 1),
                 info(this::info, 5, state.name, state.pairs), debugWallet(state.debugWallet)))
+        coroutines.forEach { it.join() }
     }
 
     override fun stop() {

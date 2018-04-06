@@ -7,6 +7,7 @@ import data.DepthBook
 import data.Order
 import database.*
 import kotlinx.coroutines.experimental.Deferred
+import kotlinx.coroutines.experimental.Job
 import org.apache.commons.codec.binary.Hex
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
@@ -18,7 +19,7 @@ import javax.crypto.spec.SecretKeySpec
 
 class WEX(override val kodein: Kodein) : IStock, KodeinAware {
     override val state = State(this::class.simpleName!!, kodein)
-    private val coroutines = mutableListOf<Deferred<Unit>>()
+    private val coroutines = mutableListOf<Job>()
 
     private val statePool = Executors.newScheduledThreadPool(1)
     private var tm = TradeManager(state)
@@ -80,7 +81,7 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
                 (it.value as Map<*, *>).forEach {
                     for (i in 0..(state.depthLimit - 1)) { //TODO: optimize (depthLimit - 1)
                         val value = ((it.value as List<*>)[i]) as List<*>
-                        update.getOrPut(pair_) { mutableMapOf() }.getOrPut(BookType.valueOf(it.key.toString())) { mutableListOf() }
+                        update.pairs.getOrPut(pair_) { mutableMapOf() }.getOrPut(BookType.valueOf(it.key.toString())) { mutableListOf() }
                                 .add(i, Depth(value[0].toString(), value[1].toString()))
                     }
                 }
@@ -181,10 +182,11 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         state.onActive(order.id, 666, BigDecimal.ZERO, OrderStatus.FAILED)
     }
 
-    override fun start() {
+    suspend override fun start() {
         syncWallet()
         coroutines.addAll(listOf(active(state.activeList), depth(), history(state.lastHistoryId, 2, 1),
                 info(this::info, 5, state.name, state.pairs), debugWallet(state.debugWallet)))
+        coroutines.forEach { it.join() }
     }
 
     override fun stop() {

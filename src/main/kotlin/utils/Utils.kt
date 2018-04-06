@@ -42,34 +42,32 @@ inline fun <T> Iterable<T>.sumByDecimal(selector: (T) -> BigDecimal): BigDecimal
 }
 
 
-fun getUpdate(curState: DepthBook, newState: DepthBook, depthLimit: Int): List<Update>? {
+fun getUpdate(curState: DepthBook, newState: DepthBook): List<Update>? {
     val updList = mutableListOf<Update>()
-    newState.forEach { pair, p ->
-        p.forEach {
-            val type = it.key
-            val newDepthLimit = Math.min(it.value.size, depthLimit)
-            for (i in 0 until newDepthLimit) {
-                val new = newState[pair]?.get(type)?.get(i)
-                val cur = curState[pair]?.get(type)?.get(i)
+    newState.pairs.forEach { pair, p ->
+        p.forEach { type, _ ->
+            val newBook = newState.pairs[pair]!!.get(type)!!
+            val curBook = curState.pairs[pair]!!.get(type)!!
+            val newRates = newBook.map { it.rate }
+            val curRates = curBook.map { it.rate }
 
-                if (cur == null) {
-                    if (new != null) {
-                        updList.add(Update(pair, type, new.rate, new.amount))
-                    }
-                } else {
-                    if (new == null) {
-                        updList.add(Update(pair, type, cur.rate))
-                    } else {
-                        if (cur.rate == new.rate) {
-                            if (cur.amount != new.amount) {
-                                updList.add(Update(pair, type, new.rate, new.amount))
-                            }
-                        } else {
-                            updList.add(Update(pair, type, new.rate))
-                            updList.add(Update(pair, type, new.rate, new.amount))
-                        }
+            val updateRates = newRates.intersect(curRates)
+
+            updateRates.forEach { rate ->
+                newBook.find { it.rate == rate }?.let { new ->
+                    curBook.find { it.rate == rate }?.takeIf { it.amount.compareTo(new.amount) != 0 }
+                            ?.run { updList.add(Update(pair, type, new.rate, new.amount)) }
+                }
+            }
+
+            if (updateRates.size != newRates.size) {
+                (newRates - updateRates).forEach { rate ->
+                    newBook.find { it.rate == rate }?.let {
+                        updList.add(Update(pair, type, it.rate, it.amount))
                     }
                 }
+
+                (curRates - updateRates).forEach { rate -> updList.add(Update(pair, type, rate)) }
             }
         }
     }

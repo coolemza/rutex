@@ -1,6 +1,5 @@
 import data.Order
 import database.BookType
-import org.amshove.kluent.shouldHaveKey
 import org.junit.Test
 import stock.Kraken
 import java.math.BigDecimal
@@ -12,16 +11,15 @@ class KrakenTest {
     @Test
     fun testWallet() {
         val wallet = stock.getBalance()!!
-       // wallet.containsKey(C.ltc)
-        wallet shouldHaveKey "ltc"
+        assert(wallet.containsKey("ltc"))
     }
 
     @Test
     fun testDepth() {
-        val depth = stock.getDepth(null, null)
+        val depth = stock.getDepth(null, "btc_usd")
         var status = true
 
-        depth?.forEach{
+        depth?.pairs?.forEach {
             (it.value as Map<*, *>).forEach{
                 if(!((it.key as BookType).toString().trim().contains("bids") || (it.key as BookType).toString().trim().contains("asks")))
                     status = false
@@ -34,7 +32,7 @@ class KrakenTest {
     @Test
     fun testOrderLiveCycle() {
         val theOrder = Order("Kraken", "sell", "ltcusd", BigDecimal.valueOf(270), BigDecimal.valueOf(0.1)).apply { orderId = id }
-        val listOrders = mutableListOf<Order>(theOrder)
+        val listOrders = mutableListOf(theOrder)
 
         stock.state.activeList.addAll(listOrders)
         stock.putOrders(listOrders)

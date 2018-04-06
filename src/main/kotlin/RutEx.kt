@@ -8,7 +8,9 @@ import database.KeyType
 import java.math.BigDecimal
 import database.RutData
 import kotlinx.coroutines.experimental.delay
+import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
+import kotlinx.coroutines.experimental.sync.Mutex
 import kotlinx.serialization.json.JSON
 import stock.IStock
 import java.io.File
@@ -20,10 +22,8 @@ import kotlin.reflect.full.primaryConstructor
 enum class Params { dbUrl, dbDriver, dbUser, dbPassword, testKeys }
 
 object RutEx {
-    val stateLock = ReentrantReadWriteLock()
+    val stateLock = Mutex()
     lateinit var stocks: Map<String, IStock>
-
-    private var stop = false
 
     val kodein = Kodein {
         constant(Params.dbUrl) with "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
@@ -46,21 +46,15 @@ object RutEx {
         }
     }
 
-    fun start() {
-        this.stocks = RutData.getStocks().map {
+    fun start() = runBlocking {
+        stocks = RutData.getStocks().map {
             it to Class.forName("stock.$it").kotlin.primaryConstructor?.call(kodein) as IStock
         }.toMap()
 
-        this.stocks.forEach { it.value.start() }
-
-        runBlocking {
-            while (!stop) {
-                delay(2000)
-            }
-        }
+        stocks.forEach { launch { it.value.start() } }
     }
 
     fun stop() {
-        stop = true
+        stocks.forEach { it.value.stop()  }
     }
 }

@@ -1,5 +1,6 @@
 package database
 
+import data.DepthBook
 import stock.Update
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -17,7 +18,7 @@ interface IDb {
     fun getStockCurrencies(name: String): Map<String, StockCurrencyInfo>
 
     fun saveNonce(key: StockKey)
-    fun saveBook(stockId: Int, update: List<Update>, time: LocalDateTime, pairs: Map<String, PairInfo>)
+    fun saveBook(stockId: Int, time: LocalDateTime, update: List<Update>? = null, fullState: DepthBook? = null)
     fun saveWallets(data: Map<WalletType, Map<String, BigDecimal>>, stockId: Int, time: LocalDateTime)
     fun saveHistoryId(id: Long, stock_id: Int)
 

@@ -1,98 +1,91 @@
 package data
 
 import database.BookType
-import java.math.BigDecimal
-import java.util.*
-import java.util.concurrent.ConcurrentHashMap
+import kotlinx.serialization.Serializable
+import stock.Update
 
-class DepthBook() : LinkedHashMap<String, MutableMap<BookType, MutableList<Depth>>>() {
+@Serializable
+class DepthBook()/* : LinkedHashMap<String, MutableMap<BookType, MutableList<Depth>>>()*/ {
     val pairCount = mutableMapOf<String, Long>()
+    val pairs = mutableMapOf<String, MutableMap<BookType, MutableList<Depth>>>()
 
     constructor(pair: String, depthLimit: Int = 0) : this() {
         pairCount.put(pair, 0)
         arrayOf(BookType.asks, BookType.bids).forEach { type ->
             for (i in 0 until depthLimit) {
-                getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(Depth())
+                pairs.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(Depth())
             }
         }
     }
 
     constructor(update: DepthBook): this() {
-        update.forEach { pair, p ->
+        update.pairs.forEach { pair, p ->
             p.forEach { type ->
                 type.value.forEach { d ->
-                    getOrPut(pair) { mutableMapOf() }.getOrPut(type.key) { mutableListOf() }.add(Depth(d))
+                    pairs.getOrPut(pair) { mutableMapOf() }.getOrPut(type.key) { mutableListOf() }.add(Depth(d))
                 }
             }
         }
     }
-//
+
 //    constructor(pairs: Map<String, PairInfo>, depthLimit: Int = 0) : this() {
 //        pairs.forEach { val pair = it.key
 //            pairCount.put(pair, 0)
-//            arrayOf(stock.BookType.asks, stock.BookType.bids).forEach { type ->
+//            arrayOf(BookType.asks, BookType.bids).forEach { type ->
 //                for (i in 0 until depthLimit) {
-//                    getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(data.Depth())
+//                    pairs.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(Depth())
 //                }
 //            }
 //        }
 //    }
 
     fun replace(update: DepthBook) {
-        update.forEach { val pair = it.key
-            it.value.forEach { val type = it.key
-                it.value.forEachIndexed { index, depth ->
-                    getOrPut(pair) { ConcurrentHashMap() }.getOrPut(type) { mutableListOf() }.run {
-                        getOrNull(index)?.replace(depth) ?: add(index, Depth(depth))
+        update.pairs.forEach { (pair, p) ->
+            p.forEach { (type, t) ->
+                t.forEachIndexed { i, depth ->
+                    pairs.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.run {
+                        getOrNull(i)?.replace(depth) ?: add(i, Depth(depth))
                     }
                 }
             }
         }
     }
 
-
-    fun removeRate(pair: String, type: BookType, rate: BigDecimal): String? {
-        this[pair]?.get(type)?.let {
-            if (it.size > 15) {
-                it.indexOfFirst { it.rate == rate }.let { index ->
-                    if (index == -1) {
-                        this.remove(pair)
-                        return "rate not found, pair: $pair, type: $type, rate: $rate"
-                    } else {
-                        it.remove(it[index])
-                    }
+    fun removeRate(upd: Update): Boolean {
+        this.pairs[upd.pair]?.get(upd.type)?.let {
+            it.indexOfFirst { it.rate == upd.rate }.let { index ->
+                if (index == -1) {
+                    return false
+                } else {
+                    return it.remove(it[index])
                 }
-            } else {
-                this.remove(pair)
-                return "size < 15, pair: $pair, removed from state"
             }
         }
-        return null
+        return false
     }
 
-    fun updateRate(pair: String, type: BookType, rate: BigDecimal, amount: BigDecimal): String? {
-        this[pair]?.get(type)?.let {
-            if (it.size > 15) {
-                var index = it.indexOfFirst { it.rate == rate }
-                when (index) {
-                    -1  -> {
-                        index = when (type) {
-                            BookType.asks -> it.indexOfFirst { it.rate > rate }
-                            BookType.bids -> it.indexOfFirst { it.rate < rate }
-                        }
-
-                        when (index) {
-                            -1   -> it.add(Depth(rate, amount))
-                            else -> it.add(index, Depth(rate, amount))
-                        }
+    fun updateRate(upd: Update): Boolean {
+        this.pairs[upd.pair]?.get(upd.type)?.let {
+            val index = it.indexOfFirst { it.rate == upd.rate }
+            when (index) {
+                -1 -> {
+                    val indexToInsert = when (upd.type) {
+                        BookType.asks -> it.indexOfFirst { it.rate > upd.rate }
+                        BookType.bids -> it.indexOfFirst { it.rate < upd.rate }
                     }
-                    else -> it.get(index).amount = amount
+
+                    when (indexToInsert) {
+                        -1 -> it.add(Depth(upd.rate, upd.amount!!))
+                        else -> it.add(indexToInsert, Depth(upd.rate, upd.amount!!))
+                    }
+                    return true
                 }
-            } else {
-                this.remove(pair)
-                return "pair: $pair, removed from state"
+                else -> {
+                    it.get(index).amount = upd.amount!!
+                    return true
+                }
             }
         }
-        return null
+        return false
     }
 }
