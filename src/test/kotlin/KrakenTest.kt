@@ -31,7 +31,7 @@ class KrakenTest {
 
     @Test
     fun testOrderLiveCycle() {
-        val theOrder = Order("Kraken", "sell", "ltcusd", BigDecimal.valueOf(270), BigDecimal.valueOf(0.1)).apply { orderId = id }
+        val theOrder = Order("Kraken", "sell", "ltc_usd", BigDecimal.valueOf(270), BigDecimal.valueOf(0.1)).apply { orderId = id }
         val listOrders = mutableListOf(theOrder)
 
         stock.state.activeList.addAll(listOrders)

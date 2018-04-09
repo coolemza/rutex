@@ -35,10 +35,15 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     private fun browserEmulationString() = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.152 Safari/537.36"
     private fun minimunOrderSizePageUrl() = "https://support.kraken.com/hc/en-us/articles/205893708-What-is-the-minimum-order-size"
 
-    private fun getRutCurrency(cur: String) = when (cur) {
+    fun getRutCurrency(cur: String) = when (cur) {
         "XBT" -> C.btc
-        "XLTC" -> C.ltc
         "DASH" -> C.dsh
+        else -> C.valueOf(cur.drop(1).toLowerCase())
+    }.toString()
+
+    private fun getKrakenCurrency(cur: String) = when (cur) {
+        "btc" -> "XBT"
+        "dsh" -> "DASH"
         else -> C.valueOf(cur.toLowerCase())
     }.toString()
 
@@ -78,7 +83,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     override fun putOrders(orders: List<Order>) {
         orders.forEach {
             val currOrder = it
-            val params = mapOf("pair" to it.pair, "type" to it.type, "ordertype" to "limit", "price" to it.rate,
+            val params = mapOf("pair" to pairsRutexToKraken(it.pair), "type" to it.type, "ordertype" to "limit", "price" to it.rate,
                     "volume" to it.amount, "userref" to it.id)
 
             state.log.info("send tp play ${params.entries.joinToString { "${it.key}:${it.value}" }}")
@@ -135,10 +140,10 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     override fun getDepth(updateTo: DepthBook?, pair: String?): DepthBook? {
         val update = updateTo ?: DepthBook()
 
-        ParseResponse(state.SendRequest(getDepthUrl(pairFromRutexToKrakenFormat(pair!!))))?.let {
+        ParseResponse(state.SendRequest(getDepthUrl(pairsRutexToKraken(pair!!))))?.let {
             if (isNoError(it)) {
                 (it["result"] as Map<String, *>).forEach {
-                    val pairName = it.key
+                    val pairName = pairsKrakenToRutex(it.key)
 
                     (it.value as Map<*, *>).forEach {
                         for (i in 0..(state.depthLimit - 1)) {
@@ -183,7 +188,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
             var currentTimeFromFunds: Long
 
             //ticker may difference on kraken and rutex locally
-            val asset = tickerFromRutexToKrakenFormat(it.key)
+            val asset = getKrakenCurrency(it.key)
             val params = mapOf("asset" to asset)
             getUrl("DepositStatus").let {
                 ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it, params)))
@@ -264,7 +269,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     }
 
     override fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): Pair<Long, WithdrawStatus> {
-        val data = mapOf("amount" to amount.toPlainString(), "asset" to crossCur.toUpperCase(), "key" to address.first)
+        val data = mapOf("amount" to amount.toPlainString(), "asset" to getKrakenCurrency(crossCur), "key" to address.first)
 
         getUrl("Withdraw").let {
             ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data)))
@@ -284,31 +289,6 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     }
 
     //--------------------------------------  utils section  -------------------------------------------
-    private fun pairFromRutexToKrakenFormat(pair: String): String {
-        pair.split("_").let {
-            var resultPair = ""
-
-            resultPair = resultPair.plus(when(it[0]){
-                "btc" -> "xbt"
-                else  -> it[0]
-            })
-
-            resultPair = resultPair.plus(when(it[1]){
-                "btc" -> "xbt"
-                else  -> it[1]
-            })
-
-            return resultPair
-        }
-    }
-
-    private fun tickerFromRutexToKrakenFormat(ticker: String): String{
-        return when(ticker){
-            "btc" -> "xbt"
-            else  -> ticker
-        }
-    }
-
     companion object {
         val Pairs = listOf(
                 P(C.btc, C.usd),
@@ -467,4 +447,7 @@ class Kraken(override val kodein: Kodein) : IStock, KodeinAware {
     }
 
     private fun isNoError(obj: JSONObject) = (obj["error"] as JSONArray).isEmpty()
+
+    fun pairsRutexToKraken(pairRutext: String) = PairsKrakenRutex.findLast { it.second.equals(pairRutext)}!!.first
+    fun pairsKrakenToRutex(pairKraken: String) = PairsKrakenRutex.findLast { it.first.equals(pairKraken)}!!.second
 }
