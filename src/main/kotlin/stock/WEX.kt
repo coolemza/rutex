@@ -6,14 +6,13 @@ import data.Depth
 import data.DepthBook
 import data.Order
 import database.*
-import kotlinx.coroutines.experimental.Deferred
 import kotlinx.coroutines.experimental.Job
+import kotlinx.coroutines.experimental.cancelAndJoin
 import org.apache.commons.codec.binary.Hex
 import org.json.simple.JSONObject
 import org.json.simple.parser.JSONParser
 import java.math.BigDecimal
 import java.net.URLEncoder
-import java.util.concurrent.Executors
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
@@ -21,18 +20,17 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
     override val state = State(this::class.simpleName!!, kodein)
     private val coroutines = mutableListOf<Job>()
 
-    private val statePool = Executors.newScheduledThreadPool(1)
     private var tm = TradeManager(state)
 
-    fun getUrl(cmd: String) = mapOf("https://wex.nz/tapi/" to cmd)
+    private fun getUrl(cmd: String) = Pair("https://wex.nz/tapi/", cmd)
 
-    fun getApi3Url(cmd: String) = mapOf("https://wex.nz/api/3/$cmd" to cmd)
+    private fun getApi3Url(cmd: String) = Pair("https://wex.nz/api/3/$cmd", cmd)
 
-    fun getDepthUrl() = "https://wex.nz/api/3/depth/${state.pairs.keys.joinToString("-")}?limit=${state.depthLimit}"
+    private fun getDepthUrl() = "https://wex.nz/api/3/depth/${state.pairs.keys.joinToString("-")}?limit=${state.depthLimit}"
 
-    fun info(): Map<String, PairInfo>? {
+    private fun info(): Map<String, PairInfo>? {
         return getApi3Url("info").let {
-            ParseResponse(state.SendRequest(it.keys.first()))?.let {
+            parseResponse(state.SendRequest(it.first))?.let {
                 (it["pairs"] as Map<*, *>).filter { state.pairs.containsKey(it.key.toString()) }.map {
                     it.key.toString() to PairInfo(state.pairs[it.key]!!.pairId, state.pairs[it.key]!!.stockPairId,
                             BigDecimal((it.value as Map<*, *>)["min_amount"].toString()))
@@ -41,47 +39,55 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         }
     }
 
-    override fun updateHistory(fromId: Long): Long {
-        var lastId = fromId
+    override fun deposit(lastId: Long, transfers: List<Transfer>): Pair<Long, List<TransferUpdate>> {
+        var newLastId = lastId
+        var stopIncrement = false
+        val tu = mutableListOf<TransferUpdate>()
+        val param = mapOf("order" to "DESC", "from_id" to lastId)
 
         getUrl("TransHistory").let {
-            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getHistoryKey(), it, mapOf("order" to "DESC", "from_id" to fromId))))?.also {
+            parseResponse(state.SendRequest(it.first, getApiRequest(state.getHistoryKey(), it.second, param)))?.also {
                 //TODO: int or Long? or String?
-                val res = (it["return"] as Map<String, *>).toSortedMap()
-                if (res.containsKey(fromId.toString())) {
-                    res.remove(fromId.toString())
+                val res = (it["return"] as Map<*, *>).map { it.key as String to it.value }.toMap().toSortedMap()
+                if (res.containsKey(lastId.toString())) {
+                    res.remove(lastId.toString())
                     if (res.isNotEmpty()) {
-                        state.log.info("new history id: $fromId")
-                        val cc = res as Map<String, Map<String, *>>
-                        val total = mutableMapOf<String, BigDecimal>()
-                        cc.filterValues { it["type"] == 1L }.forEach {
-                            val cur = (it.value["currency"] as String).toLowerCase()
-                            val amount = BigDecimal(it.value["amount"].toString())
-
-                            state.log.info("found incoming transfer ${amount} $cur, status: ${it.value["status"]}")
-
-                            total.run { put(cur, amount + getOrDefault(cur, BigDecimal.ZERO)) }
+                        res.map { it.key as String to it.value as Map<*, *> }.toMap().forEach {
+                            if (it.value["type"] == 1L) {
+                                val cur = (it.value["currency"] as String).toLowerCase()
+                                val amount = BigDecimal(it.value["amount"].toString())
+                                val status = it.value["status"].toString().toInt()
+                                transfers.find { (it.amount - it.fee!!) == amount && it.cur == cur }?.let {
+                                    TransferUpdate(it.id!!, when (status) {
+                                        3 -> { stopIncrement = true; TransferStatus.WAITING }
+                                        2 -> TransferStatus.SUCCESS
+                                        0 -> TransferStatus.FAILED
+                                        else -> TransferStatus.WAITING
+                                    })
+                                }?.let { tu.add(it) }
+                            }
+                            if (!stopIncrement) {
+                                newLastId  = it.key.toLong()
+                            }
                         }
-                        total.takeIf { it.isNotEmpty() }?.forEach { state.onWalletUpdate(plus = Pair(it.key, it.value)) }
-                        lastId = res.lastKey().toLong()
                     }
                 } else {
-                    state.log.error("history id not found!!!")
+                    state.logger.error("history id not found!!!")
                 }
-            } ?: state.log.error("updateHistory failed")
+            } ?: state.logger.error("updateHistory failed")
         }
-        return lastId
+        return Pair(newLastId, tu)
     }
 
     override fun getDepth(updateTo: DepthBook?, pair: String?): DepthBook? {
-        val update = if (updateTo != null) updateTo else DepthBook()
-        ParseResponse(state.SendRequest(getDepthUrl()))?.also {
+        val update = updateTo ?: DepthBook()
+        parseResponse(state.SendRequest(getDepthUrl()))?.also {
             (it as Map<*, *>).forEach {
-                val pair_ = it.key.toString()
+                val wexPair = it.key.toString()
                 (it.value as Map<*, *>).forEach {
                     for (i in 0..(state.depthLimit - 1)) { //TODO: optimize (depthLimit - 1)
                         val value = ((it.value as List<*>)[i]) as List<*>
-                        update.pairs.getOrPut(pair_) { mutableMapOf() }.getOrPut(BookType.valueOf(it.key.toString())) { mutableListOf() }
+                        update.pairs.getOrPut(wexPair) { mutableMapOf() }.getOrPut(BookType.valueOf(it.key.toString())) { mutableListOf() }
                                 .add(i, Depth(value[0].toString(), value[1].toString()))
                     }
                 }
@@ -91,9 +97,9 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         return null
     }
 
-    fun getApiRequest(key: StockKey, urlParam: Map<String, String>, data: Any? = null): ApiRequest {
-        val params = mutableMapOf("method" to urlParam.entries.first().value, "nonce" to "${++key.nonce}")
-        data?.let { (it as Map<*, *>).forEach { params.put(it.key as String, "${it.value}") } }
+    private fun getApiRequest(key: StockKey, cmd:  String, data: Any? = null): ApiRequest {
+        val params = mutableMapOf("method" to cmd, "nonce" to "${++key.nonce}")
+        data?.let { (it as Map<*, *>).forEach { params[it.key as String] = "${it.value}" } }
 
         //val body = params.entries.joinToString("&") { "${it.key}=${it.value}" }
         val postData = params.entries.joinToString("&") { "${URLEncoder.encode(it.key, "UTF-8")}=${URLEncoder.encode(it.value, "UTF-8")}" }
@@ -107,7 +113,7 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
 
     override fun getOrderInfo(order: Order, updateTotal: Boolean) {
         getUrl("OrderInfo").let {
-            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getActiveKey(), it, mapOf("order_id" to order.order_id))))?.also {
+            parseResponse(state.SendRequest(it.first, getApiRequest(state.getActiveKey(), it.second, mapOf("order_id" to order.order_id))))?.also {
                 //TODO: int or Long? or String?
                 val res = (it["return"] as Map<*, *>).values.first() as Map<*, *>
                 val partialAmount = BigDecimal(res["amount"].toString())
@@ -119,19 +125,19 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
                 order.takeIf { it.status != status || it.remaining.compareTo(partialAmount) != 0 }
                         ?.let { state.onActive(it.id, it.order_id, it.remaining - partialAmount, status, updateTotal) }
 
-            } ?: state.log.error("OrderInfo failed: $order")
+            } ?: state.logger.error("OrderInfo failed: $order")
         }
     }
 
-    fun ParseResponse(response: String?): JSONObject? {
+    private fun parseResponse(response: String?): JSONObject? {
         response?.let {
             val obj = JSONParser().parse(it) as JSONObject
 
-            if (obj.containsKey("success") && obj["success"] == 0L && obj["error"] != "no orders") {
-                state.log.error(obj["error"].toString())
-                return null
+            return if (obj.containsKey("success") && obj["success"] == 0L && obj["error"] != "no orders") {
+                state.logger.error(obj["error"].toString())
+                null
             } else {
-                return obj
+                obj
             }
         }
         return null
@@ -141,11 +147,11 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         tm.getKeys(orders).let {
             if (it != null) {
                 it.forEach {
-                    tm.tradePool.submit { Trade(it.key, orders); tm.releaseKey(it.key) }
+                    tm.tradePool.submit { trade(it.key, orders); tm.releaseKey(it.key) }
                 }
             } else {
                 orders.forEach { state.onActive(it.id, it.order_id, BigDecimal.ZERO, OrderStatus.FAILED) }
-                state.log.error("not enough threads for Trading!!!")
+                state.logger.error("not enough threads for Trading!!!")
             }
         }
     }
@@ -154,27 +160,26 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
-
-    fun Trade(key: StockKey, orderList: List<Order>) {
+    private fun trade(key: StockKey, orderList: List<Order>) {
         val order = orderList.first()
         val params = mapOf("pair" to order.pair, "type" to order.type, "rate" to order.rate.toString(), "amount" to order.amount.toString())
 
-        state.log.info("send tp play ${params.entries.joinToString { "${it.key}:${it.value}" }}")
+        state.logger.info("send tp play ${params.entries.joinToString { "${it.key}:${it.value}" }}")
         getUrl("Trade").let {
-            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(key, it, params)))?.also {
+            parseResponse(state.SendRequest(it.first, getApiRequest(key, it.second, params)))?.also {
                 val ret = (it["return"] as Map<*, *>)
 
-                state.log.info(" thread id: ${Thread.currentThread().id} trade ok: received: ${ret["received"]} remains: ${ret["remains"]} order_id: ${ret["order_id"]}")
+                state.logger.info(" thread id: ${Thread.currentThread().id} trade ok: received: ${ret["received"]} remains: ${ret["remains"]} order_id: ${ret["order_id"]}")
 
-                val order_id = ret["order_id"].toString().toLong()
+                val orderId = ret["order_id"].toString().toLong()
                 val remaining = BigDecimal(ret["remains"].toString())
 
-                val status = when (order_id) {
+                val status = when (orderId) {
                     0L -> OrderStatus.COMPLETED
                     else -> if (order.amount > remaining) OrderStatus.PARTIAL else OrderStatus.ACTIVE
                 }
 
-                state.onActive(order.id, order_id, order.remaining - remaining, status)
+                state.onActive(order.id, orderId, order.remaining - remaining, status)
                 return
             }
         }
@@ -182,22 +187,24 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         state.onActive(order.id, 666, BigDecimal.ZERO, OrderStatus.FAILED)
     }
 
-    suspend override fun start() {
+    override suspend fun start() {
         syncWallet()
-        coroutines.addAll(listOf(active(state.activeList), depth(), history(state.lastHistoryId, 2, 1),
-                info(this::info, 5, state.name, state.pairs), debugWallet(state.debugWallet)))
+        coroutines.addAll(listOf(active(), depth(), history(1), info(this@WEX::info, 5), debugWallet()))
         coroutines.forEach { it.join() }
     }
 
-    override fun stop() {
-        statePool.shutdown()
+    override suspend fun stop() {
+//        statePool.shutdown()
+        state.logger.info("stopping")
         tm.shutdown()
+        coroutines.forEach { it.cancelAndJoin() }
         state.shutdown()
+        state.logger.info("stopped")
     }
 
     override fun getBalance(): Map<String, BigDecimal>? {
         return getUrl("getInfo").let {
-            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWalletKey(), it)))?.let {
+            parseResponse(state.SendRequest(it.first, getApiRequest(state.getWalletKey(), it.second)))?.let {
                 ((it["return"] as Map<*, *>)["funds"] as Map<*, *>)
                         .filter { state.currencies.containsKey(it.key.toString()) }
                         .map { it.key.toString() to BigDecimal(it.value.toString()) }.toMap()
@@ -205,23 +212,22 @@ class WEX(override val kodein: Kodein) : IStock, KodeinAware {
         }
     }
 
-    override fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): Pair<Long, WithdrawStatus> {
-        val data = mapOf("amount" to amount.toPlainString(), "coinName" to crossCur.toUpperCase(), "address" to address.first)
+    override fun withdraw(transfer: Transfer): Pair<TransferStatus, String> {
+        val data = mapOf("amount" to transfer.amount.toPlainString(), "coinName" to transfer.cur.toUpperCase(), "address" to transfer.address.first)
 
         return getUrl("WithdrawCoin").let {
-            ParseResponse(state.SendRequest(it.keys.first(), getApiRequest(state.getWithdrawKey(), it, data)))?.let {
-                val res = it["return"] as Map<*, *>
+            parseResponse(state.SendRequest(it.first, getApiRequest(state.getWithdrawKey(), it.second, data)))?.let {
                 if (it["success"] == 1L) {
-                    return Pair(res["tId"] as Long, WithdrawStatus.SUCCESS)
+                    Pair(TransferStatus.PENDING, (it["return"] as Map<*, *>)["tId"].toString())
                 } else {
-                    return Pair(0L, WithdrawStatus.FAILED)
+                    Pair(TransferStatus.FAILED, "")
                 }
-            } ?: return Pair(0L, WithdrawStatus.FAILED)
+            } ?: Pair(TransferStatus.FAILED, "")
         }
     }
 
     companion object {
-        val Pairs = listOf(
+        val pairs = listOf(
                 RutData.P(C.bch, C.btc),
                 RutData.P(C.bch, C.dsh),
                 RutData.P(C.bch, C.eth),

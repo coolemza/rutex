@@ -1,27 +1,31 @@
-import com.github.salomonbrys.kodein.*
-import database.*
-import data.DepthBook
-import data.Order
+import ch.qos.logback.classic.LoggerContext
+import ch.qos.logback.classic.util.ContextInitializer
+import ch.qos.logback.core.util.StatusPrinter
+import com.github.salomonbrys.kodein.Kodein
+import com.github.salomonbrys.kodein.bind
+import com.github.salomonbrys.kodein.singleton
+import com.github.salomonbrys.kodein.with
 import database.Db
 import database.IDb
-import database.KeyType
-import java.math.BigDecimal
 import database.RutData
-import kotlinx.coroutines.experimental.delay
+import database.RutKeys
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 import kotlinx.coroutines.experimental.sync.Mutex
 import kotlinx.serialization.json.JSON
+import mu.KLoggable
+import org.slf4j.LoggerFactory
 import stock.IStock
 import java.io.File
-import stock.Kraken
-import stock.WEX
-import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.reflect.full.primaryConstructor
+import java.net.URLClassLoader
 
 enum class Params { dbUrl, dbDriver, dbUser, dbPassword, testKeys }
 
-object RutEx {
+object RutEx: KLoggable {
+    init { System.setProperty(ContextInitializer.CONFIG_FILE_PROPERTY, "logback.xml") }
+    override val logger = logger()
+
     val stateLock = Mutex()
     lateinit var stocks: Map<String, IStock>
 
@@ -40,6 +44,8 @@ object RutEx {
         try {
             Runtime.getRuntime().addShutdownHook(Thread { RutEx.stop() })
 
+            logger.info { "start ${logger.name}" }
+
             start()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -51,10 +57,12 @@ object RutEx {
             it to Class.forName("stock.$it").kotlin.primaryConstructor?.call(kodein) as IStock
         }.toMap()
 
-        stocks.forEach { launch { it.value.start() } }
+        stocks.map { launch { it.value.start() } }.onEach { it.join() }
     }
 
-    fun stop() {
+    fun stop() = runBlocking {
+        logger.info("stopping")
         stocks.forEach { it.value.stop()  }
+        logger.info("stopped")
     }
 }

@@ -6,6 +6,7 @@ import com.github.salomonbrys.kodein.instance
 import data.DepthBook
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import stock.Transfer
 import stock.Update
 import utils.local2joda
 import java.math.BigDecimal
@@ -70,6 +71,36 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
         Currencies.selectAll().associateBy({ it[Currencies.type] })
         { CurrencyInfo(it[Currencies.id], it[Currencies.type], it[Currencies.crypto]) }
     } }
+
+    override fun getTransfer(stockName: String, status: TransferStatus) = transaction {
+        val stockFrom = Stocks.alias("stockFrom")
+        val stockTo = Stocks.alias("stockTo")
+
+        Transfers.innerJoin(stockFrom, { Transfers.from_stock_id }, { stockFrom[Stocks.id] })
+                .innerJoin(stockTo, { Transfers.to_stock_id }, { stockTo[Stocks.id] })
+                .innerJoin(Currencies).select { Transfers.to_stock_id.eq(stocks[stockName]!!.id) }.map {
+                    Transfer(Pair(it[Transfers.address], it[Transfers.tag]), it[Transfers.amount], it[Currencies.type],
+                            it[stockFrom[Stocks.name]], it[stockTo[Stocks.name]], it[Transfers.status], it[Transfers.fee],
+                            it[Transfers.withdraw_id], it[Transfers.tId], it[Transfers.id])
+                }
+    }
+
+    override fun saveTransfer(transfer: Transfer) {
+        transaction {
+            Transfers.insert {
+                it[date] = local2joda(LocalDateTime.now()).toDateTime()
+                it[currency_id] = currencies[transfer.cur]!!.id
+                it[from_stock_id] = stocks[transfer.fromStock]!!.id
+                it[to_stock_id] = stocks[transfer.toStock]!!.id
+                it[amount] = transfer.amount
+                it[address] = transfer.address.first
+                it[tag] = transfer.address.second
+                it[tId] = transfer.tId
+                it[withdraw_id] = transfer.withdraw_id
+                it[status] = transfer.status
+            }
+        }
+    }
 
     override fun getKeys(name: String): MutableList<StockKey> {
         val keys = mutableListOf<StockKey>()

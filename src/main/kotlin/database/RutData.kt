@@ -58,8 +58,8 @@ object RutData {
 
     fun getStockPairs(): Map<String, List<String>> {
         return mapOf(
-                "WEX" to WEX.Pairs,
-                "Kraken" to Kraken.Pairs
+                "WEX" to WEX.pairs,
+                "Kraken" to Kraken.pairs
         )
     }
 

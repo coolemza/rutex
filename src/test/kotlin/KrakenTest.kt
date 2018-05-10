@@ -1,7 +1,9 @@
 import data.Order
 import database.BookType
+import database.TransferStatus
 import org.junit.Test
 import stock.Kraken
+import stock.Transfer
 import java.math.BigDecimal
 
 class KrakenTest {
@@ -20,8 +22,8 @@ class KrakenTest {
         var status = true
 
         depth?.pairs?.forEach {
-            (it.value as Map<*, *>).forEach{
-                if(!((it.key as BookType).toString().trim().contains("bids") || (it.key as BookType).toString().trim().contains("asks")))
+            (it.value as Map<*, *>).forEach {
+                if (!((it.key as BookType).toString().trim().contains("bids") || (it.key as BookType).toString().trim().contains("asks")))
                     status = false
             }
         }
@@ -31,24 +33,23 @@ class KrakenTest {
 
     @Test
     fun testOrderLiveCycle() {
-        val theOrder = Order("Kraken", "sell", "ltc_usd", BigDecimal.valueOf(270), BigDecimal.valueOf(0.1)).apply { orderId = id }
-        val listOrders = mutableListOf(theOrder)
+        val orders = listOf(Order("Kraken", "sell", "ltc_usd", BigDecimal("270"), BigDecimal("0.1")).apply { orderId = id })
 
-        stock.state.activeList.addAll(listOrders)
-        stock.putOrders(listOrders)
+        stock.state.activeList.addAll(orders)
+        stock.putOrders(orders)
         val orderAfterCreate = stock.state.activeList.filter { it.id == orderId }.first()
 
-
-        listOrders.clear()
-        listOrders.add(orderAfterCreate)
-        stock.cancelOrders(listOrders)
+        stock.cancelOrders(listOf(orderAfterCreate))
         val orderAfterCancellation = stock.state.activeList.find { it.id == orderId }
 
         assert(orderAfterCancellation == null)
     }
 
     @Test
-    fun testHistory() {
-        assert(stock.updateHistory(2) > 0)
+    fun testDeposit() {
+        val tl = listOf(Transfer(Pair("LSyq6MBrvPNi9DDVXF81dpi7F2FSWn7M86",""), BigDecimal("0.19900000"), "ltc", "WEX",
+                "Kraken", TransferStatus.PENDING, tId = "53d8c3a6f42be87958f0ae05fd4790acebb65ca7a121f2585ef5e32aa5a98168"))
+        val tu = stock.deposit(0, tl)
+        assert(tu.second.first().status == TransferStatus.SUCCESS)
     }
 }

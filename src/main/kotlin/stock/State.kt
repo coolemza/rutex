@@ -1,6 +1,6 @@
 package stock
 
-import ch.qos.logback.classic.Level
+import RutEx
 import com.github.salomonbrys.kodein.Kodein
 import com.github.salomonbrys.kodein.KodeinAware
 import com.github.salomonbrys.kodein.instance
@@ -11,10 +11,12 @@ import database.IDb
 import database.KeyType
 import database.OrderStatus
 import database.WalletType
-import kotlinx.coroutines.experimental.*
+import kotlinx.coroutines.experimental.CommonPool
+import kotlinx.coroutines.experimental.CoroutineExceptionHandler
+import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.sync.withLock
+import mu.KLoggable
 import okhttp3.*
-import utils.getRollingLogger
 import utils.sumByDecimal
 import java.io.IOException
 import java.math.BigDecimal
@@ -23,27 +25,28 @@ import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
-class State(val name: String, override val kodein: Kodein): KodeinAware {
+class State(val name: String, override val kodein: Kodein): KodeinAware, KLoggable {
     val db: IDb = instance()
 
     var depthLimit = 5
-    val log = getRollingLogger(name, Level.DEBUG)
+//    val log = getRollingLogger(name, Level.DEBUG)
+    override val logger = logger(name)
 
-    val commonContext = CommonPool + CoroutineExceptionHandler { _, e -> log.error(e.message, e) }
+    private val commonContext = CommonPool + CoroutineExceptionHandler { _, e -> logger.error(e.message, e) }
 
-    val info = db.getStockInfo(name)
+    private val info = db.getStockInfo(name)
     val id = info.id
-    val keys = db.getKeys(name)
+    private val keys = db.getKeys(name)
     val pairs = db.getStockPairs(name)
     val currencies = db.getStockCurrencies(name) //RutBot.rutdb.GetCurrencies(id)
 
-    val coroutines = mutableListOf<Deferred<Unit>>()
+//    val coroutines = mutableListOf<Deferred<Unit>>()
 
     var lastHistoryId = info.historyId
 
     lateinit var stateTime: LocalDateTime
     lateinit var walletTime: LocalDateTime
-    val okHttp = OkHttpClient()
+    private val okHttp = OkHttpClient()
     private val mediaType = MediaType.parse("application/x-www-form-urlencoded; charset=utf-8")!!
 
     val depthBook = DepthBook()
@@ -75,65 +78,67 @@ class State(val name: String, override val kodein: Kodein): KodeinAware {
             fullState?.also { launch(commonContext) { db.saveBook(id, time, fullState = it) } }?.let {
                 depthBook.replace(it)
                 updated.replace(it)
+                logger.debug("$name full state updated for (${it.pairs.size}) pairs")
             }
 
-            update?.also { launch(commonContext) { db.saveBook(id, time, it) } }?.forEach { upd ->
+            update?.also { launch(commonContext) { db.saveBook(id, time, it) } }?.onEach { upd ->
                 if (depthBook.pairs[upd.pair]!![upd.type]!!.size < 2) {
-                    log.error("size < 2, pair: ${upd.pair}")
+                    logger.error("size < 2, pair: ${upd.pair}")
                 } else {
                     if (!(if (upd.amount == null) depthBook.removeRate(upd) else depthBook.updateRate(upd))) {
-                        log.error("rate not found $upd")
+                        logger.error("rate not found $upd")
                         return@withLock null
                     }
 
                     updated.pairs.getOrPut(upd.pair) { mutableMapOf() }.getOrPut(upd.type) { mutableListOf() }
                             .add(0, Depth(upd.rate, upd.amount ?: BigDecimal.ZERO))
                 }
-            }
+            }?.also { logger.debug("$name state updated (${it.size})") }
         }
         updated.pairs.clear()
         return true
     }
 
     fun onWalletUpdate(update: Map<String, BigDecimal>? = null, plus: Pair<String, BigDecimal>? = null, minus: Pair<String, BigDecimal>? = null) {
-            val total = mutableMapOf<String, BigDecimal>().apply { putAll(walletTotal) }
+        val total = mutableMapOf<String, BigDecimal>().apply { putAll(walletTotal) }
 
-            update?.let { total.putAll(it) }
-            plus?.let { (cur, amount) -> total.run { put(cur, getOrDefault(cur, BigDecimal.ZERO) + amount) } }
-            minus?.let { (cur, amount) -> total.run { put(cur, getOrDefault(cur, BigDecimal.ZERO) - amount) } }
+        update?.let { total.putAll(it) }
+        plus?.let { (cur, amount) -> total.run { put(cur, getOrDefault(cur, BigDecimal.ZERO) + amount) } }
+        minus?.let { (cur, amount) -> total.run { put(cur, getOrDefault(cur, BigDecimal.ZERO) - amount) } }
 
-            val locked = getLocked()
-            val available = total.entries.associateBy({ it.key }) { it.value - locked.getOrDefault(it.key, BigDecimal.ZERO) }
+        val locked = getLocked()
+        val available = total.entries.associateBy({ it.key }) { it.value - locked.getOrDefault(it.key, BigDecimal.ZERO) }
 
-            val time = LocalDateTime.now().also { walletTime = it }
+        val time = LocalDateTime.now().also { walletTime = it }
 
-            mapOf(WalletType.AVAILABLE to available, WalletType.LOCKED to locked, WalletType.TOTAL to total).let {
-                launch { db.saveWallets(it, id, time) }
-            }
+        mapOf(WalletType.AVAILABLE to available, WalletType.LOCKED to locked, WalletType.TOTAL to total).let {
+            launch { db.saveWallets(it, id, time) }
+        }
 
-            available.also { walletAvailable.putAll(it) }
-            total.let { walletTotal.putAll(it) }
-            locked.let { walletLocked.run { clear(); putAll(it) } }
+        available.also { walletAvailable.putAll(it) }
+        total.let { walletTotal.putAll(it) }
+        locked.let { walletLocked.run { clear(); putAll(it) } }
 
-            mapOf("total" to walletTotal, "available" to walletAvailable, "locked" to walletLocked, "update" to wallet).forEach { log.info("${it.key}: ${it.value}") }
-            log.info("avaBOT: ${walletAvailable.toSortedMap()}")
+        mapOf("total" to walletTotal, "available" to walletAvailable, "locked" to walletLocked, "update" to wallet)
+                .forEach { logger.info("$name ${it.key}: ${it.value}") }
+        logger.info("${name} avaBOT: ${walletAvailable.toSortedMap()}")
     }
 
     fun onActive(deal_id: Long?, order_id: Long, amount: BigDecimal? = null, status: OrderStatus? = null, updateTotal: Boolean = true) {
         val order = activeList.find { if (deal_id != null) it.id == deal_id else it.order_id == order_id }
 
         if (order == null) {
-            log.error("Thread id: ${Thread.currentThread().id} id: $deal_id order: $order_id not found in activeList, possibly it not from bot or already removed")
+            logger.error("Thread id: ${Thread.currentThread().id} id: $deal_id order: $order_id not found in activeList, possibly it not from bot or already removed")
             return
         }
 
         takeIf { order.order_id == 0L }?.run {
-            log.info("order: ${order.order_id} -> $order_id, deal_id = ${order.id}")
+            logger.info("order: ${order.order_id} -> $order_id, deal_id = ${order.id}")
             order.order_id = order_id
         }
 
         status?.let {
-            log.info("order: $order_id status: ${order.status} -> $it")
+            logger.info("order: $order_id status: ${order.status} -> $it")
             order.status = it
         }
 
@@ -141,14 +146,14 @@ class State(val name: String, override val kodein: Kodein): KodeinAware {
             OrderStatus.ACTIVE, OrderStatus.PARTIAL, OrderStatus.COMPLETED -> {
                 if (amount != null) {
                     val newRemainig = order.remaining - amount
-                    log.info("order: $order_id remaining: ${order.remaining} -> $newRemainig amount: $amount, status: ${order.status}")
+                    logger.info("order: $order_id remaining: ${order.remaining} -> $newRemainig amount: $amount, status: ${order.status}")
                     order.remaining = newRemainig
                     val complete = order.remaining.compareTo(BigDecimal.ZERO) == 0
 
                     if (complete) {
-                        log.info("id: ${order.id} order: ${order.order_id} removed from orderList, status: ${order.status}")
+                        logger.info("id: ${order.id} order: ${order.order_id} removed from orderList, status: ${order.status}")
                         activeList.remove(order)
-                        activeList.let { log.info("active list:\n" + it.joinToString("\n") { it.toString() }) }
+                        activeList.let { logger.info("active list:\n" + it.joinToString("\n") { it.toString() }) }
                     }
                     if (updateTotal) {
                         onWalletUpdate(plus = Pair(order.getToCur(), order.getPlayedAmount(amount)),
@@ -160,7 +165,7 @@ class State(val name: String, override val kodein: Kodein): KodeinAware {
                 }
             }
             OrderStatus.CANCELED, OrderStatus.FAILED -> {
-                log.info("id: ${order.id}, order: ${order.order_id} removing from orderList, status: ${order.status}")
+                logger.info("id: ${order.id}, order: ${order.order_id} removing from orderList, status: ${order.status}")
                 if (updateTotal) {
                     activeList.remove(order)
                     onWalletUpdate()
@@ -170,8 +175,9 @@ class State(val name: String, override val kodein: Kodein): KodeinAware {
         }
     }
 
-    fun SendRequest(url: String, ap: ApiRequest? = null): String? {
-        okHttp.newBuilder().connectTimeout(2000, TimeUnit.MILLISECONDS)
+    fun SendRequest(url: String, ap: ApiRequest? = null, timeOut: Long = 2000): String? {
+        logger.trace("begin ${LocalDateTime.now()}")
+        okHttp.newBuilder().connectTimeout(timeOut, TimeUnit.MILLISECONDS)
         try {
             val request = Request.Builder().url(url).apply {
                 ap?.run { headers(Headers.of(ap.headers)).post(RequestBody.create(mediaType, ap.postData.toByteArray())) }
@@ -180,39 +186,40 @@ class State(val name: String, override val kodein: Kodein): KodeinAware {
             val response = okHttp.newCall(request.build()).execute()
             response.body()?.string()?.let { return it }
 
-            log.error("null body received")
+            logger.error("null body received")
             return null
         } catch (e: SocketTimeoutException) {
-            log.warn(e.message)
-            log.warn(" $url")
+            logger.warn(e.message)
+            logger.warn(" $url")
+            logger.trace("end ${LocalDateTime.now()}")
             return null
         } catch (e: IOException) {
-            log.error(e.message)
+            logger.error(e.message)
             return null
         }
     }
 
     fun shutdown() {
-        log.info("waiting dispatcher..")
-        okHttp.dispatcher().executorService().shutdown()
+//        log.info("waiting dispatcher..")
+////        okHttp.dispatcher().executorService().shutdown()
+//
+//        log.info("stopping coroutines")
+//        try {
+//            runBlocking { coroutines.forEach {
+//                try {
+//                    log.info("stopping $it")
+//                    it.cancelAndJoin()
+//                    log.info("stopped $it")
+//                } catch (e: Exception) {
+//                    log.info("runblock exception!!")
+//                    log.error(e.message,e)
+//                }
+//            } }
+//        } catch (e:Exception) {
+//            log.error(e.message,e)
+//        }
 
-        log.info("stopping coroutines")
-        try {
-            runBlocking { coroutines.forEach {
-                try {
-                    log.info("stopping $it")
-                    it.cancelAndJoin()
-                    log.info("stopped $it")
-                } catch (e: Exception) {
-                    log.info("runblock exception!!")
-                    log.error(e.message,e)
-                }
-            } }
-        } catch (e:Exception) {
-            log.error(e.message,e)
-        }
-
-        log.info("saving all nonce's")
+        logger.info("saving all nonce's")
         keys.forEach { db.saveNonce(it) }
     }
 }

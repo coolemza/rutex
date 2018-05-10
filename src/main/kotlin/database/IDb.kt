@@ -1,6 +1,7 @@
 package database
 
 import data.DepthBook
+import stock.Transfer
 import stock.Update
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -12,6 +13,8 @@ data class CurrencyInfo(val id: Int, val name: String, val crypto: Boolean)
 data class StockCurrencyInfo(val curId: Int)
 
 interface IDb {
+    fun getTransfer(stockName: String, status: TransferStatus = TransferStatus.WAITING): List<Transfer>
+    fun saveTransfer(transfer: Transfer)
     fun getStockInfo(name: String): StockInfo
     fun getKeys(name: String): MutableList<StockKey>
     fun getStockPairs(name: String): Map<String, PairInfo>

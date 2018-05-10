@@ -1,20 +1,25 @@
 package stock
 
+import RutEx
 import data.DepthBook
 import data.Order
-import database.*
-import kotlinx.coroutines.experimental.*
+import database.BookType
+import database.PairInfo
+import database.TransferStatus
+import kotlinx.coroutines.experimental.NonCancellable
+import kotlinx.coroutines.experimental.delay
+import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.sync.withLock
+import kotlinx.coroutines.experimental.withContext
 import utils.getUpdate
 import java.math.BigDecimal
-import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.TimeUnit
-import kotlin.concurrent.read
-import kotlin.concurrent.write
 
-enum class WithdrawStatus { SUCCESS, FAILED }
-
-data class Update(val pair:String, val type: BookType, val rate: BigDecimal, val amount: BigDecimal? = null)
+data class Update(val pair: String, val type: BookType, val rate: BigDecimal, val amount: BigDecimal? = null)
+data class Transfer(val address: Pair<String, String>, val amount: BigDecimal, val cur: String, val fromStock: String,
+                    val toStock: String, var status: TransferStatus, var fee: BigDecimal? = null,
+                    var withdraw_id: String = "", var tId: String = "", val id: Int = 0)
+data class TransferUpdate(val id: Int, val status: TransferStatus)
 data class ApiRequest(val headers: Map<String, String>, val postData: String, val postReq: Map<String, String>)
 
 interface IStock {
@@ -26,18 +31,18 @@ interface IStock {
     fun putOrders(orders: List<Order>)
     fun cancelOrders(orders: List<Order>)
     suspend fun start()
-    fun stop()
-    fun updateHistory(fromId: Long): Long
-    fun withdraw(address: Pair<String, String>, crossCur: String, amount: BigDecimal): Pair<Long, WithdrawStatus>
+    suspend fun stop()
+    fun deposit(lastId: Long, transfers: List<Transfer>): Pair<Long, List<TransferUpdate>>
+    fun withdraw(transfer: Transfer): Pair<TransferStatus, String>
 
-    fun debugWallet(debugWallet: ConcurrentMap<String, BigDecimal>) = launch {
+    fun debugWallet() = launch {
         while (isActive) {
             try {
                 withContext(NonCancellable) {
-                    getBalance()?.let { debugWallet.putAll(it) }
+                    getBalance()?.let { state.debugWallet.putAll(it) }
                 }
             } catch (e: Exception) {
-                state.log.error(e.message, e)
+                state.logger.error(e.message, e)
             }
             delay(10, TimeUnit.SECONDS)
         }
@@ -64,47 +69,64 @@ interface IStock {
                     }
                 }
             } catch (e: Exception) {
-                state.log.error(e.message, e)
+                state.logger.error(e.message, e)
             }
             delay(1, TimeUnit.NANOSECONDS)
         }
     }
 
-    fun active(activeList: MutableList<Order>) = launch {
+    fun active() = launch {
         while (isActive) {
-            RutEx.stateLock.withLock { activeList.filter { it.order_id != 0L } }.forEach {
+            RutEx.stateLock.withLock { state.activeList.filter { it.order_id != 0L } }.forEach {
                 withContext(NonCancellable) {
                     getOrderInfo(it)
+                }
+            }
+            delay(1, TimeUnit.NANOSECONDS)
+        }
+    }
+
+    fun history(delay: Long = 10) = launch {
+        while (isActive) {
+            state.db.getTransfer(state.name).let {
+                withContext(NonCancellable) { updateTransfer(it) }
+                delay(delay, TimeUnit.SECONDS)
+            }
+        }
+    }
+
+    fun updateTransfer(transfers: List<Transfer>) {
+        deposit(state.lastHistoryId, transfers).let {
+            if (it.first > state.lastHistoryId) {
+                state.db.saveHistoryId(it.first, state.id)
+                state.lastHistoryId = it.first
+            }
+            it.second.forEach { tu ->
+                val ts = transfers.find { it.id == tu.id }!!
+                if (tu.status != ts.status) {
+                    if (ts.status == TransferStatus.SUCCESS) {
+                        state.onWalletUpdate(plus = Pair(ts.cur, ts.amount))
+                    }
+                    state.db.saveTransfer(ts)
                 }
             }
         }
     }
 
-    fun history(lastId: Long, delaySeconds: Long, stockId: Int) = launch {
-        var historyLastId = lastId
-        while (isActive) {
-            withContext(NonCancellable) {
-                updateHistory(historyLastId).takeIf { it > historyLastId }
-                        ?.also { state.db.saveHistoryId(it, stockId) }?.also { historyLastId = it }
-            }
-            delay(delaySeconds, TimeUnit.SECONDS)
-        }
-    }
-
-    fun info(func: () -> Map<String, PairInfo>?, delayMinutes: Long, stockName: String, pairs: Map< String, PairInfo>) = launch {
-        val lastPair = state.db.getStockPairs(stockName)
+    fun info(func: () -> Map<String, PairInfo>?, delay: Long) = launch {
+        val lastPair = state.db.getStockPairs(state.name)
         while (isActive) {
             withContext(NonCancellable) {
                 func()?.let {
                     val newList = it.filter { it.value.minAmount.compareTo(lastPair[it.key]!!.minAmount) != 0 }
                     if (newList.isNotEmpty()) {
-                        state.db.updateStockPairs(newList, stockName)
+                        state.db.updateStockPairs(newList, state.name)
                         newList.forEach { lastPair[it.key]!!.minAmount = it.value.minAmount }
-                        RutEx.stateLock.withLock { newList.forEach { pairs[it.key]!!.minAmount = it.value.minAmount } }
+                        RutEx.stateLock.withLock { newList.forEach { state.pairs[it.key]!!.minAmount = it.value.minAmount } }
                     }
                 }
             }
-            delay(delayMinutes, TimeUnit.MINUTES)
+            delay(delay, TimeUnit.SECONDS)
         }
     }
 
@@ -115,7 +137,7 @@ interface IStock {
         do {
             val beginWallet = getBalance()
             state.activeList.forEach { getOrderInfo(it, false) }
-            state.lastHistoryId = updateHistory(state.lastHistoryId)
+            state.db.getTransfer(state.name).let { updateTransfer(it) }
             val endWallet = getBalance()
             if (beginWallet != null && endWallet != null) {
                 if (beginWallet.all { it.value == endWallet[it.key]!! }) {

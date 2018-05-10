@@ -6,6 +6,17 @@ enum class BookType { asks, bids }
 enum class WalletType { AVAILABLE, LOCKED, TOTAL }
 enum class OrderStatus { ACTIVE, PARTIAL, COMPLETED, CANCELED, FAILED }
 enum class KeyType { WALLET, TRADE, ACTIVE, DEBUG, HISTORY, WITHDRAW }
+enum class TransferStatus { PENDING, WAITING, SUCCESS, FAILED }
+
+object Api_Keys: Table() {
+    val id = integer("id").autoIncrement().primaryKey()
+    val stock_id = integer("stock_id") references Stocks.id
+    val key_name = varchar("key_name", 64)
+    val apikey = varchar("apikey", 256)
+    val secret = varchar("secret", 256)
+    val nonce = long("nonce")
+    val type = enumeration("type", KeyType::class.java)
+}
 
 object Currencies: Table() {
     val id = integer("id").autoIncrement().primaryKey()
@@ -18,12 +29,6 @@ object Pairs: Table() {
     val type = varchar("type", 16)
 }
 
-object Stocks: Table() {
-    val id = integer("id").autoIncrement().primaryKey()
-    val name = varchar("name", 20)
-    val history_last_id = long("history_last_id")
-}
-
 object Rates: Table() {
     val date = datetime("date")
     val stock_id = integer("stock_id")
@@ -34,23 +39,10 @@ object Rates: Table() {
     val full = bool("full").default(false)
 }
 
-object Wallet: Table() {
-    val date = datetime("date")
-    val stock_id = integer("stock_id") references Stocks.id
-    val currency_id = integer("currency_id") references  Currencies.id
-    val type = enumeration("type", WalletType::class.java)
-    val amount = decimal("amount", 20, 8)
-    init { uniqueIndex(stock_id, currency_id, type) }
-}
-
-object Stock_Pair: Table() {
+object Stocks: Table() {
     val id = integer("id").autoIncrement().primaryKey()
-    val pair_id = integer("pair_id") references Pairs.id
-    val stock_id = integer("stock_id") references Stocks.id
-    val minAmount = decimal("min_amount", 20, 8)
-    val percent = decimal("percent", 20, 8)
-    val enabled = bool("status") //TODO: refactor
-    init { uniqueIndex(stock_id, pair_id) }
+    val name = varchar("name", 20)
+    val history_last_id = long("history_last_id")
 }
 
 object Stock_Currency: Table() {
@@ -66,12 +58,38 @@ object Stock_Currency: Table() {
     val enabled = bool("enabled")
 }
 
-object Api_Keys: Table() {
+object Stock_Pair: Table() {
     val id = integer("id").autoIncrement().primaryKey()
+    val pair_id = integer("pair_id") references Pairs.id
     val stock_id = integer("stock_id") references Stocks.id
-    val key_name = varchar("key_name", 64)
-    val apikey = varchar("apikey", 256)
-    val secret = varchar("secret", 256)
-    val nonce = long("nonce")
-    val type = enumeration("type", KeyType::class.java)
+    val minAmount = decimal("min_amount", 20, 8)
+    val percent = decimal("percent", 20, 8)
+    val enabled = bool("status") //TODO: refactor
+    init { uniqueIndex(stock_id, pair_id) }
 }
+
+object Transfers: Table() {
+    val id = integer("id").autoIncrement().primaryKey()
+    val date = datetime("date")
+    val currency_id = integer("cur_id") references Currencies.id
+    val from_stock_id = integer("from_stock_id") references Stocks.id
+    val to_stock_id = integer("to_stock_id") references Stocks.id
+    val amount = decimal("amount", 20, 8)
+    val fee = decimal("fee", 20, 8)
+    val address = varchar("address", 256)
+    val tag = varchar("tag", 256)
+    val tId = varchar("t_id", 256)
+    val withdraw_id = varchar("withdraw_id", 256)
+    var status = Wallet.enumeration("type", TransferStatus::class.java)
+}
+
+object Wallet: Table() {
+    val date = datetime("date")
+    val stock_id = integer("stock_id") references Stocks.id
+    val currency_id = integer("currency_id") references  Currencies.id
+    val type = enumeration("type", WalletType::class.java)
+    val amount = decimal("amount", 20, 8)
+    init { uniqueIndex(stock_id, currency_id, type) }
+}
+
+

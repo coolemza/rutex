@@ -24,7 +24,7 @@ class TradeManager(val state: State) {
                 return availableList
             } else {
                 orders.forEach { state.onActive(it.id, it.order_id, BigDecimal.ZERO, OrderStatus.FAILED) }
-                state.log.error("not enough threads for Trading!!!")
+                state.logger.error("not enough threads for Trading!!!")
             }
         }
         return null
@@ -38,5 +38,6 @@ class TradeManager(val state: State) {
 
     fun shutdown() {
         tradePool.shutdown()
+        tList.forEach { state.db.saveNonce(it.key) }
     }
 }
