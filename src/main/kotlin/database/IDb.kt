@@ -6,7 +6,7 @@ import stock.Update
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
-data class StockKey(val key: String, val secret: String, var nonce: Long, val type: KeyType)
+data class StockKey(val key: String, val secret: String, var nonce: Long, val type: KeyType, var busy: Boolean = false)
 data class PairInfo(val pairId: Int, val stockPairId: Int, var minAmount: BigDecimal)
 data class StockInfo(val id: Int, val historyId: Long)
 data class CurrencyInfo(val id: Int, val name: String, val crypto: Boolean)
@@ -16,7 +16,7 @@ interface IDb {
     fun getTransfer(stockName: String, status: TransferStatus = TransferStatus.WAITING): List<Transfer>
     fun saveTransfer(transfer: Transfer)
     fun getStockInfo(name: String): StockInfo
-    fun getKeys(name: String): MutableList<StockKey>
+    fun getKeys(name: String): List<StockKey>
     fun getStockPairs(name: String): Map<String, PairInfo>
     fun getStockCurrencies(name: String): Map<String, StockCurrencyInfo>
 

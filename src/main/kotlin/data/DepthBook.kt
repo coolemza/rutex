@@ -28,6 +28,11 @@ class DepthBook()/* : LinkedHashMap<String, MutableMap<BookType, MutableList<Dep
         }
     }
 
+    fun reset() {
+        pairCount.clear()
+        pairs.clear()
+    }
+
 //    constructor(pairs: Map<String, PairInfo>, depthLimit: Int = 0) : this() {
 //        pairs.forEach { val pair = it.key
 //            pairCount.put(pair, 0)

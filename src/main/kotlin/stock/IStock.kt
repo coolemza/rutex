@@ -5,12 +5,11 @@ import data.DepthBook
 import data.Order
 import database.BookType
 import database.PairInfo
+import database.StockKey
 import database.TransferStatus
-import kotlinx.coroutines.experimental.NonCancellable
-import kotlinx.coroutines.experimental.delay
-import kotlinx.coroutines.experimental.launch
+import kotlinx.coroutines.experimental.*
 import kotlinx.coroutines.experimental.sync.withLock
-import kotlinx.coroutines.experimental.withContext
+import org.json.simple.parser.JSONParser
 import utils.getUpdate
 import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
@@ -20,26 +19,37 @@ data class Transfer(val address: Pair<String, String>, val amount: BigDecimal, v
                     val toStock: String, var status: TransferStatus, var fee: BigDecimal? = null,
                     var withdraw_id: String = "", var tId: String = "", val id: Int = 0)
 data class TransferUpdate(val id: Int, val status: TransferStatus)
-data class ApiRequest(val headers: Map<String, String>, val postData: String, val postReq: Map<String, String>)
 
 interface IStock {
     val state: State
 
-    fun getDepth(updateTo: DepthBook? = null, pair: String? = null): DepthBook?
-    fun getBalance(): Map<String, BigDecimal>?
-    fun getOrderInfo(order: Order, updateTotal: Boolean = true)
-    fun putOrders(orders: List<Order>)
-    fun cancelOrders(orders: List<Order>)
+    fun balance(): Map<String, BigDecimal>?
+    suspend fun cancelOrders(orders: List<Order>): List<Job>?
+    fun deposit(lastId: Long, transfers: List<Transfer>): Pair<Long, List<TransferUpdate>>
+    fun depth(updateTo: DepthBook? = null, pair: String? = null): DepthBook?
+    fun handleError(res: Any): Any?
+    fun orderInfo(order: Order, updateTotal: Boolean = true)
+    suspend fun putOrders(orders: List<Order>): List<Job>?
     suspend fun start()
     suspend fun stop()
-    fun deposit(lastId: Long, transfers: List<Transfer>): Pair<Long, List<TransferUpdate>>
     fun withdraw(transfer: Transfer): Pair<TransferStatus, String>
+
+    fun active() = launch {
+        while (isActive) {
+            RutEx.stateLock.withLock { state.activeList.filter { it.order_id != 0L } }.forEach {
+                withContext(NonCancellable) {
+                    orderInfo(it)
+                }
+            }
+            delay(1, TimeUnit.NANOSECONDS)
+        }
+    }
 
     fun debugWallet() = launch {
         while (isActive) {
             try {
                 withContext(NonCancellable) {
-                    getBalance()?.let { state.debugWallet.putAll(it) }
+                    balance()?.let { state.debugWallet.putAll(it) }
                 }
             } catch (e: Exception) {
                 state.logger.error(e.message, e)
@@ -48,39 +58,21 @@ interface IStock {
         }
     }
 
-    fun depth(pair: String? = null) = launch {
+    fun depthPolling(pair: String? = null) = launch {
         val stateNew = DepthBook()
         val stateCur = DepthBook()
 
-        while (stateNew.pairs.isEmpty()) {
-            getDepth(stateNew, pair)?.let {
-                stateCur.replace(stateNew)
-                state.OnStateUpdate(fullState = stateNew)
-            }
-        }
-
         while (isActive) {
             try {
-                stateNew.pairs.clear()  //TODO: reset socket state on error
-                getDepth(stateNew, pair)?.let {
-                    getUpdate(stateCur, it)?.let {
-                        state.OnStateUpdate(it)
-                        stateCur.replace(stateNew)
-                    }
+                stateNew.pairs.clear()
+                while (stateCur.pairs.isEmpty()) {
+                    depth(stateCur, pair)?.let { state.OnStateUpdate(fullState = stateNew) }
                 }
+                depth(stateNew, pair)?.also {
+                    getUpdate(stateCur, it)?.let { state.OnStateUpdate(it) }?.also { stateCur.replace(stateNew) }
+                } ?: stateCur.reset()
             } catch (e: Exception) {
                 state.logger.error(e.message, e)
-            }
-            delay(1, TimeUnit.NANOSECONDS)
-        }
-    }
-
-    fun active() = launch {
-        while (isActive) {
-            RutEx.stateLock.withLock { state.activeList.filter { it.order_id != 0L } }.forEach {
-                withContext(NonCancellable) {
-                    getOrderInfo(it)
-                }
             }
             delay(1, TimeUnit.NANOSECONDS)
         }
@@ -91,24 +83,6 @@ interface IStock {
             state.db.getTransfer(state.name).let {
                 withContext(NonCancellable) { updateTransfer(it) }
                 delay(delay, TimeUnit.SECONDS)
-            }
-        }
-    }
-
-    fun updateTransfer(transfers: List<Transfer>) {
-        deposit(state.lastHistoryId, transfers).let {
-            if (it.first > state.lastHistoryId) {
-                state.db.saveHistoryId(it.first, state.id)
-                state.lastHistoryId = it.first
-            }
-            it.second.forEach { tu ->
-                val ts = transfers.find { it.id == tu.id }!!
-                if (tu.status != ts.status) {
-                    if (ts.status == TransferStatus.SUCCESS) {
-                        state.onWalletUpdate(plus = Pair(ts.cur, ts.amount))
-                    }
-                    state.db.saveTransfer(ts)
-                }
             }
         }
     }
@@ -130,15 +104,33 @@ interface IStock {
         }
     }
 
+    suspend fun parallelOrders(orders: List<Order>, code: (Order, StockKey) -> Unit): List<Job>? {
+        return state.getTradeKeys(orders)?.map { (order, key) ->
+            launch {
+                code(order, key)
+                state.releaseTradeKey(key)
+            }
+        }
+    }
+
+    fun parseResponse(response: String?) = try {
+        response?.let {
+            state.logger.trace(response)
+            handleError(JSONParser().parse(it))
+        }
+    } catch (e: Exception) {
+        run { state.logger.error(e.message, e) }.run { null }
+    }
+
     fun syncWallet() {
         //TODO: synchronize wallet and History() on start
         var walletSynchronized = false
 
         do {
-            val beginWallet = getBalance()
-            state.activeList.forEach { getOrderInfo(it, false) }
+            val beginWallet = balance()
+            state.activeList.forEach { orderInfo(it, false) }
             state.db.getTransfer(state.name).let { updateTransfer(it) }
-            val endWallet = getBalance()
+            val endWallet = balance()
             if (beginWallet != null && endWallet != null) {
                 if (beginWallet.all { it.value == endWallet[it.key]!! }) {
                     val locked = state.getLocked()
@@ -148,5 +140,23 @@ interface IStock {
                 }
             }
         } while (!walletSynchronized)
+    }
+
+    fun updateTransfer(transfers: List<Transfer>) {
+        deposit(state.lastHistoryId, transfers).let {
+            if (it.first > state.lastHistoryId) {
+                state.db.saveHistoryId(it.first, state.id)
+                state.lastHistoryId = it.first
+            }
+            it.second.forEach { tu ->
+                val ts = transfers.find { it.id == tu.id }!!
+                if (tu.status != ts.status) {
+                    if (ts.status == TransferStatus.SUCCESS) {
+                        state.onWalletUpdate(plus = Pair(ts.cur, ts.amount))
+                    }
+                    state.db.saveTransfer(ts)
+                }
+            }
+        }
     }
 }

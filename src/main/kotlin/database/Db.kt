@@ -15,11 +15,11 @@ import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
 class Db(override val kodein: Kodein) : IDb, KodeinAware {
-    val db = kodein.run {
-        Database.connect(instance(Params.dbUrl), instance(Params.dbDriver), instance(Params.dbUser), instance(Params.dbPassword))
-    }
-
     init {
+        kodein.run {
+            Database.connect(instance(Params.dbUrl), instance(Params.dbDriver), instance(Params.dbUser), instance(Params.dbPassword))
+        }
+
         transaction {
             SchemaUtils.create(Currencies, Pairs, Stocks, Stock_Pair, Stock_Currency, Api_Keys, Wallet, Rates)
         }
@@ -64,10 +64,10 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
     }
 
     val pairs: Map<String, Int> by lazy { transaction { Pairs.selectAll().associateBy({ it[Pairs.type] }) { it[Pairs.id] } } }
-    val stocks: Map<String, StockInfo> by lazy {transaction {
+    private val stocks: Map<String, StockInfo> by lazy {transaction {
         Stocks.selectAll().associateBy({ it[Stocks.name] }) { StockInfo(it[Stocks.id], it[Stocks.history_last_id]) }
     } }
-    val currencies: Map<String, CurrencyInfo> by lazy { transaction {
+    private val currencies: Map<String, CurrencyInfo> by lazy { transaction {
         Currencies.selectAll().associateBy({ it[Currencies.type] })
         { CurrencyInfo(it[Currencies.id], it[Currencies.type], it[Currencies.crypto]) }
     } }
@@ -102,14 +102,10 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
         }
     }
 
-    override fun getKeys(name: String): MutableList<StockKey> {
-        val keys = mutableListOf<StockKey>()
-        transaction {
-            Api_Keys.innerJoin(Stocks).select { Stocks.name.eq(name) }.forEach {
-                keys.add(StockKey(it[Api_Keys.apikey], it[Api_Keys.secret], it[Api_Keys.nonce], it[Api_Keys.type]))
-            }
+    override fun getKeys(name: String) = transaction {
+        Api_Keys.innerJoin(Stocks).select { Stocks.name.eq(name) }.map {
+            StockKey(it[Api_Keys.apikey], it[Api_Keys.secret], it[Api_Keys.nonce], it[Api_Keys.type])
         }
-        return keys
     }
 
     override fun getStockPairs(name: String) = transaction {
@@ -217,14 +213,14 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
         }
     }
 
-    fun initStock(name: String) = transaction {
+    private fun initStock(name: String) = transaction {
         Stocks.insert {
             it[Stocks.name] = name
             it[history_last_id] = 0
         } get Stocks.id
     }
 
-    fun initPair(name: String) = transaction {
+    private fun initPair(name: String) = transaction {
         Pairs.insert {
             it[type] = name
         } get Pairs.id
@@ -242,15 +238,15 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
         }
     }
 
-    fun initCurrency(name: String, crypto: Boolean) = transaction {
+    private fun initCurrency(name: String, crypto: Boolean) = transaction {
         Currencies.insert {
             it[type] = name
             it[Currencies.crypto] = crypto
         } get Currencies.id
     }
 
-    fun initStockCurrency(stockId: Int, curId: Int, withdrawMin: BigDecimal, withdrawPercent: BigDecimal,
-                          depositMin: BigDecimal, depositPercent: BigDecimal, address: String, tag: String) = transaction {
+    private fun initStockCurrency(stockId: Int, curId: Int, withdrawMin: BigDecimal, withdrawPercent: BigDecimal,
+                                  depositMin: BigDecimal, depositPercent: BigDecimal, address: String, tag: String) = transaction {
         Stock_Currency.insert {
             it[stock_id] = stockId
             it[currency_id] = curId

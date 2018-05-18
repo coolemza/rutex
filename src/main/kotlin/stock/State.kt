@@ -7,13 +7,11 @@ import com.github.salomonbrys.kodein.instance
 import data.Depth
 import data.DepthBook
 import data.Order
-import database.IDb
-import database.KeyType
-import database.OrderStatus
-import database.WalletType
+import database.*
 import kotlinx.coroutines.experimental.CommonPool
 import kotlinx.coroutines.experimental.CoroutineExceptionHandler
 import kotlinx.coroutines.experimental.launch
+import kotlinx.coroutines.experimental.sync.Mutex
 import kotlinx.coroutines.experimental.sync.withLock
 import mu.KLoggable
 import okhttp3.*
@@ -33,10 +31,9 @@ class State(val name: String, override val kodein: Kodein): KodeinAware, KLoggab
     override val logger = logger(name)
 
     private val commonContext = CommonPool + CoroutineExceptionHandler { _, e -> logger.error(e.message, e) }
-
+    private val keys = db.getKeys(name)
     private val info = db.getStockInfo(name)
     val id = info.id
-    private val keys = db.getKeys(name)
     val pairs = db.getStockPairs(name)
     val currencies = db.getStockCurrencies(name) //RutBot.rutdb.GetCurrencies(id)
 
@@ -64,7 +61,20 @@ class State(val name: String, override val kodein: Kodein): KodeinAware, KLoggab
     fun getActiveKey() = keys.find { it.type == KeyType.ACTIVE }!!
     fun getWithdrawKey() = keys.find { it.type == KeyType.WITHDRAW }!!
     fun getHistoryKey() = keys.find { it.type == KeyType.HISTORY }!!
-    fun getTradesKey() = keys.filter { it.type == KeyType.TRADE }
+//    fun getTradesKey() = keys.filter { it.type == KeyType.TRADE }
+
+    private val tradeLock = Mutex()
+    private val tList = keys.filter { it.type == KeyType.TRADE }
+
+    suspend fun getTradeKeys(orders: List<Order>) = tradeLock.withLock {
+        tList.filter { !it.busy }.takeIf { it.size >= orders.size }?.let {
+            orders.mapIndexed { i, order -> order to it[i] }.onEach { it.second.busy = true }
+        } ?: orders.forEach { onActive(it.id, it.order_id, BigDecimal.ZERO, OrderStatus.FAILED) }
+                .also { logger.error("not enough threads for Trading!!!") }.let { null }
+    }
+
+    suspend fun releaseTradeKey(key: StockKey) = tradeLock.withLock { key.busy = false }
+
     //fun getListActiveOrders(): List<Order> {return activeList}
 
     fun getLocked(orderList: MutableList<Order> = activeList) =  orderList.groupBy { it.getLockCur() }
@@ -175,12 +185,12 @@ class State(val name: String, override val kodein: Kodein): KodeinAware, KLoggab
         }
     }
 
-    fun SendRequest(url: String, ap: ApiRequest? = null, timeOut: Long = 2000): String? {
+    fun SendRequest(url: String, headers: Map<String, String>? = null, postData: String = "", timeOut: Long = 2000): String? {
         logger.trace("begin ${LocalDateTime.now()}")
         okHttp.newBuilder().connectTimeout(timeOut, TimeUnit.MILLISECONDS)
         try {
             val request = Request.Builder().url(url).apply {
-                ap?.run { headers(Headers.of(ap.headers)).post(RequestBody.create(mediaType, ap.postData.toByteArray())) }
+                headers?.run { headers(Headers.of(headers)).post(RequestBody.create(mediaType, postData.toByteArray())) }
             }
 
             val response = okHttp.newCall(request.build()).execute()

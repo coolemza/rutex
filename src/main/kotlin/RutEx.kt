@@ -1,6 +1,4 @@
-import ch.qos.logback.classic.LoggerContext
 import ch.qos.logback.classic.util.ContextInitializer
-import ch.qos.logback.core.util.StatusPrinter
 import com.github.salomonbrys.kodein.Kodein
 import com.github.salomonbrys.kodein.bind
 import com.github.salomonbrys.kodein.singleton
@@ -14,11 +12,9 @@ import kotlinx.coroutines.experimental.runBlocking
 import kotlinx.coroutines.experimental.sync.Mutex
 import kotlinx.serialization.json.JSON
 import mu.KLoggable
-import org.slf4j.LoggerFactory
 import stock.IStock
 import java.io.File
 import kotlin.reflect.full.primaryConstructor
-import java.net.URLClassLoader
 
 enum class Params { dbUrl, dbDriver, dbUser, dbPassword, testKeys }
 
@@ -27,7 +23,7 @@ object RutEx: KLoggable {
     override val logger = logger()
 
     val stateLock = Mutex()
-    lateinit var stocks: Map<String, IStock>
+    private lateinit var stocks: Map<String, IStock>
 
     val kodein = Kodein {
         constant(Params.dbUrl) with "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
@@ -52,7 +48,7 @@ object RutEx: KLoggable {
         }
     }
 
-    fun start() = runBlocking {
+    private fun start() = runBlocking {
         stocks = RutData.getStocks().map {
             it to Class.forName("stock.$it").kotlin.primaryConstructor?.call(kodein) as IStock
         }.toMap()
@@ -60,7 +56,7 @@ object RutEx: KLoggable {
         stocks.map { launch { it.value.start() } }.onEach { it.join() }
     }
 
-    fun stop() = runBlocking {
+    private fun stop() = runBlocking {
         logger.info("stopping")
         stocks.forEach { it.value.stop()  }
         logger.info("stopped")
