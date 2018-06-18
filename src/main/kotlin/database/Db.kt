@@ -14,11 +14,10 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
-class Db(override val kodein: Kodein) : IDb, KodeinAware {
+open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
     init {
-        kodein.run {
-            Database.connect(instance(Params.dbUrl), instance(Params.dbDriver), instance(Params.dbUser), instance(Params.dbPassword))
-        }
+        kodein.run { Database.connect(instance(Parameters.dbUrl), instance(Parameters.dbDriver),
+                instance(Parameters.dbUser), instance(Parameters.dbPassword)) }
 
         transaction {
             SchemaUtils.create(Currencies, Pairs, Stocks, Stock_Pair, Stock_Currency, Api_Keys, Wallet, Rates)
@@ -26,26 +25,12 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
 
         val stocks = RutData.getStocks().associateBy({ it }) { initStock(it) }
 
-//        val currencies = RutData.getCurrencies().associateBy({ it }) {
-//            initCurrency(it, it != "usd" && it != "eur" && it != "rur")
-//        }
-
         val currencies = RutData.getCurrencies().associateBy({ it }) {
             val crypto = it != "usd" && it != "eur" && it != "rur"
             Pair(initCurrency(it, crypto), crypto)
         }
 
-//        val pairs = RutData.getPairs().associateBy({ it }) { initPair(it) }
         val pairs = RutData.getStockPairs().map { it.value }.reduce { a, b -> a + b }.toSet().associateBy({ it }) { initPair(it) }
-
-//        stocks.forEach { _, stockId ->
-//            currencies.forEach { _, curId ->
-//                initStockCurrency(stockId, curId, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, "", "")
-//            }
-//            pairs.forEach { _, pairId ->
-//                initStockPair(stockId, pairId, BigDecimal("0.002"), BigDecimal("0.001"))
-//            }
-//        }
 
         stocks.forEach { stock, stockId ->
             RutData.getStockPairs()[stock]!!.map { it.split("_") }.reduce { a, b -> a + b }.toSet().sorted().forEach {
@@ -57,17 +42,17 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
             }
         }
 
-        kodein.instance<RutKeys>(Params.testKeys).keys.forEach {
+        kodein.instance<RutKeys>(Parameters.testKeys).keys.forEach {
             val stockId = stocks[it.key]!!
             it.value.forEach { initKey(stockId, it.key, it.secret, it.type) }
         }
     }
 
-    val pairs: Map<String, Int> by lazy { transaction { Pairs.selectAll().associateBy({ it[Pairs.type] }) { it[Pairs.id] } } }
+    override val pairs: Map<String, Int> by lazy { transaction { Pairs.selectAll().associateBy({ it[Pairs.type] }) { it[Pairs.id] } } }
     private val stocks: Map<String, StockInfo> by lazy {transaction {
         Stocks.selectAll().associateBy({ it[Stocks.name] }) { StockInfo(it[Stocks.id], it[Stocks.history_last_id]) }
     } }
-    private val currencies: Map<String, CurrencyInfo> by lazy { transaction {
+    override val currencies: Map<String, CurrencyInfo> by lazy { transaction {
         Currencies.selectAll().associateBy({ it[Currencies.type] })
         { CurrencyInfo(it[Currencies.id], it[Currencies.type], it[Currencies.crypto]) }
     } }
@@ -130,11 +115,6 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
             }
         }
     }
-
-    override fun saveHistoryId(id: Long, stock_id: Int) {
-
-    }
-
 
     override fun updateStockPairs(update: Map<String, PairInfo>, stockName: String) {
         TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
@@ -200,11 +180,19 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
         }
     }
 
+    override fun saveHistoryId(id: Long, stock_id: Int) {
+        transaction {
+            Stocks.update({ Stocks.id.eq(stock_id) }) {
+                it[Stocks.history_last_id] = id
+            }
+        }
+    }
+
     override fun initKey(stockId: Int, apiKey: String, secretPart: String, keyType: KeyType) {
         transaction {
             Api_Keys.insert {
                 it[stock_id] = stockId
-                it[key_name] = "rutex@WEX"
+                it[key_name] = "rutex"
                 it[apikey] = apiKey
                 it[secret] = secretPart
                 it[nonce] = Instant.ofEpochSecond(0L).until(Instant.now(), ChronoUnit.SECONDS)
@@ -214,16 +202,56 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
     }
 
     private fun initStock(name: String) = transaction {
-        Stocks.insert {
-            it[Stocks.name] = name
-            it[history_last_id] = 0
-        } get Stocks.id
+        Stocks.select { Stocks.name.eq(name) }.let {
+            if (it.asIterable().toList().isEmpty()) {
+                Stocks.insert {
+                    it[Stocks.name] = name
+                    it[history_last_id] = 0
+                } get Stocks.id
+            } else {
+                it.first()[Stocks.id]
+            }
+        }
     }
 
     private fun initPair(name: String) = transaction {
-        Pairs.insert {
-            it[type] = name
-        } get Pairs.id
+        Pairs.select { Pairs.type.eq(name) }.let {
+            if (it.asIterable().toList().isEmpty()) {
+                Pairs.insert {
+                    it[type] = name
+                } get Pairs.id
+            } else {
+                it.first()[Pairs.id]
+            }
+        }
+    }
+
+    private fun initCurrency(name: String, crypto: Boolean) = transaction {
+        Currencies.select { Currencies.type.eq(name) }.let {
+            if (it.asIterable().toList().isEmpty()) {
+                Currencies.insert {
+                    it[type] = name
+                    it[Currencies.crypto] = crypto
+                } get Currencies.id
+            } else {
+                it.first()[Currencies.id]
+            }
+        }
+    }
+
+    private fun initStockCurrency(stockId: Int, curId: Int, withdrawMin: BigDecimal, withdrawPercent: BigDecimal,
+                                  depositMin: BigDecimal, depositPercent: BigDecimal, address: String, tag: String) = transaction {
+        Stock_Currency.insertIgnore {
+            it[stock_id] = stockId
+            it[currency_id] = curId
+            it[enabled] = true
+            it[withdraw_min] = withdrawMin
+            it[withdraw_percent] = withdrawPercent
+            it[deposit_min] = depositMin
+            it[deposit_percent] = depositPercent
+            it[Stock_Currency.address] = address
+            it[Stock_Currency.tag] = tag
+        }
     }
 
     override fun initStockPair(stockId: Int, pairId: Int, percent: BigDecimal, minAmount: BigDecimal) {
@@ -236,27 +264,5 @@ class Db(override val kodein: Kodein) : IDb, KodeinAware {
                 it[Stock_Pair.minAmount] = minAmount
             }
         }
-    }
-
-    private fun initCurrency(name: String, crypto: Boolean) = transaction {
-        Currencies.insert {
-            it[type] = name
-            it[Currencies.crypto] = crypto
-        } get Currencies.id
-    }
-
-    private fun initStockCurrency(stockId: Int, curId: Int, withdrawMin: BigDecimal, withdrawPercent: BigDecimal,
-                                  depositMin: BigDecimal, depositPercent: BigDecimal, address: String, tag: String) = transaction {
-        Stock_Currency.insert {
-            it[stock_id] = stockId
-            it[currency_id] = curId
-            it[enabled] = true
-            it[withdraw_min] = withdrawMin
-            it[withdraw_percent] = withdrawPercent
-            it[deposit_min] = depositMin
-            it[deposit_percent] = depositPercent
-            it[Stock_Currency.address] = address
-            it[Stock_Currency.tag] = tag
-        } get Stock_Currency.id
     }
 }

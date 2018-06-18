@@ -13,6 +13,9 @@ data class CurrencyInfo(val id: Int, val name: String, val crypto: Boolean)
 data class StockCurrencyInfo(val curId: Int)
 
 interface IDb {
+    val pairs: Map<String, Int>
+    val currencies: Map<String, CurrencyInfo>
+
     fun getTransfer(stockName: String, status: TransferStatus = TransferStatus.WAITING): List<Transfer>
     fun saveTransfer(transfer: Transfer)
     fun getStockInfo(name: String): StockInfo

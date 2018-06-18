@@ -3,10 +3,10 @@ package database
 import org.jetbrains.exposed.sql.Table
 
 enum class BookType { asks, bids }
-enum class WalletType { AVAILABLE, LOCKED, TOTAL }
-enum class OrderStatus { ACTIVE, PARTIAL, COMPLETED, CANCELED, FAILED }
 enum class KeyType { WALLET, TRADE, ACTIVE, DEBUG, HISTORY, WITHDRAW }
+enum class OrderStatus { ACTIVE, PARTIAL, COMPLETED, CANCELED, FAILED }
 enum class TransferStatus { PENDING, WAITING, SUCCESS, FAILED }
+enum class WalletType { AVAILABLE, LOCKED, TOTAL }
 
 object Api_Keys: Table() {
     val id = integer("id").autoIncrement().primaryKey()
@@ -22,11 +22,13 @@ object Currencies: Table() {
     val id = integer("id").autoIncrement().primaryKey()
     val type = varchar("type", 4)
     val crypto = bool("crypto")
+    init { uniqueIndex(type) }
 }
 
 object Pairs: Table() {
     val id = integer("id").autoIncrement().primaryKey()
     val type = varchar("type", 16)
+    init { uniqueIndex(type) }
 }
 
 object Rates: Table() {
@@ -43,6 +45,7 @@ object Stocks: Table() {
     val id = integer("id").autoIncrement().primaryKey()
     val name = varchar("name", 20)
     val history_last_id = long("history_last_id")
+    init { uniqueIndex(name) }
 }
 
 object Stock_Currency: Table() {

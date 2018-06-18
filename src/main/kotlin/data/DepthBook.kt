@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 import stock.Update
 
 @Serializable
-class DepthBook()/* : LinkedHashMap<String, MutableMap<BookType, MutableList<Depth>>>()*/ {
+class DepthBook() {
     val pairCount = mutableMapOf<String, Long>()
     val pairs = mutableMapOf<String, MutableMap<BookType, MutableList<Depth>>>()
 
