@@ -5,7 +5,7 @@ import data.Order
 import database.BookType
 import database.OrderStatus
 import database.TransferStatus
-import kotlinx.coroutines.experimental.Job
+import kotlinx.coroutines.Job
 import java.math.BigDecimal
 
 data class Update(val pair: String, val type: BookType, val rate: BigDecimal, val amount: BigDecimal? = null)

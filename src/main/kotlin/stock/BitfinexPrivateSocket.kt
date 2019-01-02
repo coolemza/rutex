@@ -2,7 +2,8 @@ package stock
 
 import RutEx.logger
 import database.StockKey
-import kotlinx.coroutines.experimental.launch
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import okhttp3.*
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
@@ -67,13 +68,13 @@ class BitfinexPrivateSocket(val stock: Bitfinex, val key: StockKey): WebSocketLi
 
                         when (res[1]) {
                             "ws" -> stock.onWallet(null, res[2] as List<List<*>>)
-                            "wu" -> launch { stock.onWallet(res[2] as List<*>, null) }
+                            "wu" -> GlobalScope.launch { stock.onWallet(res[2] as List<*>, null) }
                             "os" -> (res[2] as List<*>).forEach { stock.onOrder(it as List<*>) }
-                            "on", "ou", "oc" -> launch { stock.onOrder(res[2] as List<*>) }
-                            "n" -> launch { stock.OnNotify(res[2] as List<*>) }
-                            "te" -> launch { stock.onTradeExecuted(res[2] as List<*>) }
-                            "tu" -> launch { stock.onTradeUpdate(res[2] as List<*>) }
-                            else -> launch { logger.info("not handled: " + text) }
+                            "on", "ou", "oc" -> GlobalScope.launch { stock.onOrder(res[2] as List<*>) }
+                            "n" -> GlobalScope.launch { stock.OnNotify(res[2] as List<*>) }
+                            "te" -> GlobalScope.launch { stock.onTradeExecuted(res[2] as List<*>) }
+                            "tu" -> GlobalScope.launch { stock.onTradeUpdate(res[2] as List<*>) }
+                            else -> GlobalScope.launch { logger.info("not handled: " + text) }
                         }
                     }
                     else -> {

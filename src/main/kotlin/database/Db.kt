@@ -1,11 +1,13 @@
 package database
 
-import com.github.salomonbrys.kodein.Kodein
-import com.github.salomonbrys.kodein.KodeinAware
-import com.github.salomonbrys.kodein.instance
 import data.DepthBook
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.kodein.di.Kodein
+import org.kodein.di.KodeinAware
+import org.kodein.di.direct
+import org.kodein.di.generic.instance
+import org.kodein.di.newInstance
 import stock.Transfer
 import stock.Update
 import utils.local2joda
@@ -15,18 +17,26 @@ import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
 open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
+    val db = kodein.direct.run {
+        newInstance {
+            Database.connect(
+                instance(Parameters.dbUrl), instance(Parameters.dbDriver),
+                instance(Parameters.dbUser), instance(Parameters.dbPassword)
+            )
+        }
+    }
+
     init {
-        kodein.run { Database.connect(instance(Parameters.dbUrl), instance(Parameters.dbDriver),
-                instance(Parameters.dbUser), instance(Parameters.dbPassword)) }
 
         transaction {
             SchemaUtils.create(Currencies, Pairs, Stocks, Stock_Pair, Stock_Currency, Api_Keys, Wallet, Rates)
         }
 
-        val stocks = RutData.getStocks().associateBy({ it }) { initStock(it) }
+//        val stocks = RutData.getStocks().associateBy({ it }) { initStock(it) }
+        val stocks = RutData.getStocks().map { it.key to initStock(it.toPair()) }.toMap()
 
         val currencies = RutData.getCurrencies().associateBy({ it }) {
-            val crypto = it != "usd" && it != "eur" && it != "rur"
+            val crypto = RutData.isCrypto(it)
             Pair(initCurrency(it, crypto), crypto)
         }
 
@@ -42,7 +52,7 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
             }
         }
 
-        kodein.instance<RutKeys>(Parameters.testKeys).keys.forEach {
+        kodein.direct.instance<RutKeys>(Parameters.testKeys).keys.forEach {
             val stockId = stocks[it.key]!!
             it.value.forEach { initKey(stockId, it.key, it.secret, it.type) }
         }
@@ -201,15 +211,17 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
         }
     }
 
-    private fun initStock(name: String) = transaction {
-        Stocks.select { Stocks.name.eq(name) }.let {
-            if (it.asIterable().toList().isEmpty()) {
+    private fun initStock(data: Pair<String, Int>) = transaction {
+        val (stock, id) = data
+        Stocks.select { Stocks.name.eq(stock) }.let { s ->
+            if (s.asIterable().toList().isEmpty()) {
                 Stocks.insert {
-                    it[Stocks.name] = name
+                    it[Stocks.id] = id
+                    it[Stocks.name] = stock
                     it[history_last_id] = 0
-                } get Stocks.id
+                }[Stocks.id]!!
             } else {
-                it.first()[Stocks.id]
+                s.first()[Stocks.id]
             }
         }
     }
@@ -227,14 +239,14 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
     }
 
     private fun initCurrency(name: String, crypto: Boolean) = transaction {
-        Currencies.select { Currencies.type.eq(name) }.let {
-            if (it.asIterable().toList().isEmpty()) {
+        Currencies.select { Currencies.type.eq(name) }.let { c ->
+            if (c.asIterable().toList().isEmpty()) {
                 Currencies.insert {
                     it[type] = name
                     it[Currencies.crypto] = crypto
-                } get Currencies.id
+                }[Currencies.id]!!
             } else {
-                it.first()[Currencies.id]
+                c.first()[Currencies.id]
             }
         }
     }

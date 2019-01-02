@@ -1,14 +1,14 @@
 package stock
 
-import com.github.salomonbrys.kodein.Kodein
 import data.Depth
 import data.DepthBook
 import data.Order
 import database.*
 import database.RutData.P
-import kotlinx.coroutines.experimental.Job
-import kotlinx.coroutines.experimental.cancelAndJoin
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import org.apache.commons.codec.binary.Hex
+import org.kodein.di.Kodein
 import java.math.BigDecimal
 import java.net.URLEncoder
 import javax.crypto.Mac
@@ -186,6 +186,7 @@ class WEX(kodein: Kodein): RestStock(kodein, WEX::class.simpleName!!) {
     }
 
     companion object {
+        val name = WEX::class.simpleName!!
         val Pairs = listOf(
                 P(C.bch, C.btc),
                 P(C.bch, C.dsh),

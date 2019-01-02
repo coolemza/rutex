@@ -1,14 +1,14 @@
 package stock
 
-import com.github.salomonbrys.kodein.Kodein
 import data.DepthBook
 import data.Order
 import database.KeyType
 import database.OrderStatus
 import database.StockKey
-import kotlinx.coroutines.experimental.*
-import kotlinx.coroutines.experimental.sync.Mutex
-import kotlinx.coroutines.experimental.sync.withLock
+import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import org.kodein.di.Kodein
 import utils.getUpdate
 import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
@@ -19,18 +19,18 @@ abstract class RestStock(kodein: Kodein, name: String) : Stock(kodein, name) {
 
     abstract fun depth(updateTo: DepthBook?, pair: String?): DepthBook?
 
-    fun active(time: Long = 1, unit: TimeUnit = TimeUnit.NANOSECONDS) = launch {
+    fun active(time: Long = 1, unit: TimeUnit = TimeUnit.NANOSECONDS) = GlobalScope.launch {
         while (isActive) {
             RutEx.stateLock.withLock { activeList.filter { it.stockOrderId != "0" } }.forEach { order ->
                 withContext(NonCancellable) {
                     orderInfo(order)?.let { onActiveUpdate(it) }
                 }
-                delay(time, unit)
+                delay(unit.toMillis(time))
             }
         }
     }
 
-    fun depthPolling(pair: String? = null) = launch {
+    fun depthPolling(pair: String? = null) = GlobalScope.launch {
         val stateNew = DepthBook()
         val stateCur = DepthBook()
 
@@ -46,7 +46,7 @@ abstract class RestStock(kodein: Kodein, name: String) : Stock(kodein, name) {
             } catch (e: Exception) {
                 logger.error(e.message, e)
             }
-            delay(1, TimeUnit.NANOSECONDS)
+            delay(TimeUnit.NANOSECONDS.toMillis(1))
         }
     }
 
@@ -62,7 +62,7 @@ abstract class RestStock(kodein: Kodein, name: String) : Stock(kodein, name) {
 
     suspend fun parallelOrders(orders: List<Order>, code: (Order, StockKey) -> OrderUpdate?): List<Job>? {
         return getTradeKeys(orders)?.map { (order, key) ->
-            launch {
+            GlobalScope.launch {
                 val orderUpdate = code(order, key)
                 releaseTradeKey(key)
                 orderUpdate?.let { onActiveUpdate(it) } ?: logger.error("something goes wrong with $order")

@@ -1,6 +1,7 @@
 package database
 
 import kotlinx.serialization.Serializable
+import stock.Bitfinex
 import stock.Kraken
 import stock.WEX
 
@@ -11,8 +12,12 @@ data class Key(val key: String, val secret: String, val type: KeyType)
 data class RutKeys(val keys: Map<String, List<Key>>)
 
 enum class C {
+    ada,
+    bab,
     bch,
+    bsv,
     btc,
+    btg,
     cad,
     cnh,
     doge,
@@ -23,7 +28,6 @@ enum class C {
     eur,
     gbp,
     gno,
-    icn,
     iota,
     jpy,
     ltc,
@@ -32,6 +36,7 @@ enum class C {
     nvc,
     omg,
     ppc,
+    qtum,
     rep,
     rrt,
     rur,
@@ -41,17 +46,25 @@ enum class C {
     xlm,
     xmr,
     xrp,
+    xtz,
     zec
 }
 
 object RutData {
-    fun getStocks(): List<String> {
-        return listOf(
-                "WEX",
-                "Kraken")
+    fun getStocks(): Map<String, Int> {
+        return mapOf(
+            WEX.name to 1,
+//                CEX.name to 2,
+//                Poloniex.name to 3,
+            Kraken.name to 4,
+//                Huobi.name to 5,
+            Bitfinex.name to 6
+        )
     }
 
     fun getCurrencies() = C.values().map { it.name }
+
+    fun isCrypto(cur: String) = cur != "usd" && cur != "eur" && cur != "rur" && cur != "jpy" && cur != "gbp"
 
     fun P(cur1: C, cur2: C) = "${cur1.name}_${cur2.name}"
 

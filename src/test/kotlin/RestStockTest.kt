@@ -3,7 +3,7 @@ import database.BookType
 import database.KeyType
 import database.OrderStatus
 import database.TransferStatus
-import kotlinx.coroutines.experimental.runBlocking
+import kotlinx.coroutines.runBlocking
 import org.junit.Assume.assumeNotNull
 import stock.RestStock
 import stock.Transfer

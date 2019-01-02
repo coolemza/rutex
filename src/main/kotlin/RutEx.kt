@@ -1,15 +1,21 @@
 import bots.IBot
 import ch.qos.logback.classic.util.ContextInitializer
-import com.github.salomonbrys.kodein.Kodein
-import com.github.salomonbrys.kodein.bind
-import com.github.salomonbrys.kodein.singleton
-import com.github.salomonbrys.kodein.with
+//import com.github.salomonbrys.kodein.Kodein
+//import com.github.salomonbrys.kodein.bind
+//import com.github.salomonbrys.kodein.singleton
+//import com.github.salomonbrys.kodein.with
 import database.*
-import kotlinx.coroutines.experimental.launch
-import kotlinx.coroutines.experimental.runBlocking
-import kotlinx.coroutines.experimental.sync.Mutex
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.serialization.ImplicitReflectionSerializer
 import kotlinx.serialization.json.JSON
+import kotlinx.serialization.parse
 import mu.KLoggable
+import org.kodein.di.Kodein
+import org.kodein.di.generic.bind
+import org.kodein.di.generic.singleton
+import org.kodein.di.generic.with
 import stock.IStock
 import stock.OrderUpdate
 import java.io.File
@@ -25,6 +31,7 @@ object RutEx: KLoggable {
     private lateinit var stocks: Map<String, IStock>
     private val botList = mutableMapOf<Int, IBot>()
 
+    @UseExperimental(ImplicitReflectionSerializer::class)
     val kodein = Kodein {
         constant(Parameters.dbUrl) with "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
         constant(Parameters.dbDriver) with "org.h2.Driver"
@@ -53,7 +60,7 @@ object RutEx: KLoggable {
     }
 
     private fun start() = runBlocking {
-        stocks = RutData.getStocks().map {
+        stocks = RutData.getStocks().keys.map {
             it to Class.forName("stock.$it").kotlin.primaryConstructor?.call(kodein) as IStock
         }.toMap()
 

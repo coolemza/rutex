@@ -1,15 +1,15 @@
 package stock
 
-import com.github.salomonbrys.kodein.Kodein
 import data.Depth
 import data.DepthBook
 import data.Order
 import database.*
 import database.RutData.P
-import kotlinx.coroutines.experimental.Job
+import kotlinx.coroutines.Job
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.jsoup.Jsoup
+import org.kodein.di.Kodein
 import java.math.BigDecimal
 import java.net.URLEncoder
 import java.security.MessageDigest
@@ -212,6 +212,7 @@ class Kraken(kodein: Kodein): RestStock(kodein, Kraken::class.simpleName!!) {
     private fun getRutPair(pair: String) = PairsKrakenRutex.findLast { it.first == pair }!!.second
 
     companion object {
+        val name = Kraken::class.simpleName!!
         val Pairs = listOf(
                 P(C.bch, C.eur),
                 P(C.bch, C.usd),
@@ -252,9 +253,6 @@ class Kraken(kodein: Kodein): RestStock(kodein, Kraken::class.simpleName!!) {
                 P(C.eth, C.gbp),
                 P(C.eth, C.jpy),
                 P(C.eth, C.usd),
-
-                P(C.icn, C.eth),
-                P(C.icn, C.btc),
 
                 P(C.ltc, C.btc),
                 P(C.ltc, C.eur),

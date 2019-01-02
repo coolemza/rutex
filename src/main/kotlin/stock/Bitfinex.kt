@@ -1,15 +1,16 @@
 package stock
 
-import com.github.salomonbrys.kodein.Kodein
 import data.DepthBook
 import data.Depth
 import data.Order
 import database.*
-import kotlinx.coroutines.experimental.Job
-import kotlinx.coroutines.experimental.runBlocking
-import kotlinx.coroutines.experimental.sync.withLock
+import database.RutData.P
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.withLock
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
+import org.kodein.di.Kodein
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.time.LocalDateTime
@@ -436,25 +437,60 @@ class Bitfinex(kodein: Kodein): WebSocketStock(kodein, Bitfinex::class.simpleNam
     }
 
     companion object {
-        val Pairs = listOf(
-                RutData.P(C.bch, C.btc),
-                RutData.P(C.bch, C.eth),
-                RutData.P(C.bch, C.usd),
+        val name = Bitfinex::class.simpleName!!
+        val Pairs = mapOf(
+            P(C.bab, C.btc) to "",
+            P(C.bab, C.usd) to "",
 
-                RutData.P(C.btc, C.eur),
-                RutData.P(C.btc, C.usd),
+//                P(C.bch, C.btc) to "",
+//                P(C.bch, C.eth) to "",
+//                P(C.bch, C.usd) to "",
 
-                RutData.P(C.dsh, C.btc),
-                RutData.P(C.dsh, C.usd),
+            P(C.bsv, C.btc) to "",
+            P(C.bsv, C.usd) to "",
 
-                RutData.P(C.eth, C.btc),
-                RutData.P(C.eth, C.usd),
+            P(C.btc, C.eur) to "",
+            P(C.btc, C.gbp) to "",
+            P(C.btc, C.jpy) to "",
+            P(C.btc, C.usd) to "",
 
-                RutData.P(C.ltc, C.btc),
-                RutData.P(C.ltc, C.usd),
+            P(C.btg, C.btc) to "",
+            P(C.btg, C.usd) to "",
 
-                RutData.P(C.zec, C.btc),
-                RutData.P(C.zec, C.usd)
+            P(C.dsh, C.btc) to "",
+            P(C.dsh, C.usd) to "",
+
+            P(C.eos, C.btc) to "",
+            P(C.eos, C.eur) to "",
+            P(C.eos, C.eth) to "",
+            P(C.eos, C.gbp) to "",
+            P(C.eos, C.jpy) to "",
+            P(C.eos, C.usd) to "",
+
+            P(C.etc, C.btc) to "",
+            P(C.etc, C.usd) to "",
+
+            P(C.eth, C.btc) to "",
+            P(C.eth, C.eur) to "",
+            P(C.eth, C.gbp) to "",
+            P(C.eth, C.jpy) to "",
+            P(C.eth, C.usd) to "",
+
+            P(C.ltc, C.btc) to "",
+            P(C.ltc, C.usd) to "",
+
+            P(C.omg, C.btc) to "",
+            P(C.omg, C.eth) to "",
+            P(C.omg, C.usd) to "",
+
+            P(C.xmr, C.btc) to "",
+            P(C.xmr, C.usd) to "",
+
+            P(C.xrp, C.btc) to "",
+            P(C.xrp, C.usd) to "",
+
+            P(C.zec, C.btc) to "",
+            P(C.zec, C.usd) to ""
         )
     }
 }

@@ -1,19 +1,19 @@
 package stock
 
 import RutEx
-import com.github.salomonbrys.kodein.Kodein
-import com.github.salomonbrys.kodein.KodeinAware
-import com.github.salomonbrys.kodein.instance
 import data.Depth
 import data.DepthBook
 import data.Order
 import database.*
-import kotlinx.coroutines.experimental.*
-import kotlinx.coroutines.experimental.sync.withLock
+import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.withLock
 import mu.KLoggable
 import mu.KLogger
 import okhttp3.*
 import org.json.simple.parser.JSONParser
+import org.kodein.di.Kodein
+import org.kodein.di.KodeinAware
+import org.kodein.di.generic.instance
 import utils.sumByDecimal
 import java.io.IOException
 import java.math.BigDecimal
@@ -23,12 +23,12 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 abstract class Stock(final override val kodein: Kodein, final override val name: String): IStock, KodeinAware, KLoggable {
-    val db: IDb = instance()
+    val db: IDb by instance()
 
     var depthLimit = 5
     override val logger: KLogger get() = logger(name)
 
-    val commonContext = CommonPool + CoroutineExceptionHandler { _, e -> logger.error(e.message, e) }
+    val commonContext = CoroutineExceptionHandler { _, e -> logger.error(e.message, e) }
     var keys = db.getKeys(name)
     private val info = db.getStockInfo(name)
     val id = info.id
@@ -72,7 +72,7 @@ abstract class Stock(final override val kodein: Kodein, final override val name:
 
     override fun withdraw(transfer: Transfer): Pair<TransferStatus, String> = withdraw(transfer, withdrawKey)
 
-    fun debugWallet() = launch {
+    fun debugWallet() = GlobalScope.launch {
         while (isActive) {
             try {
                 withContext(NonCancellable) {
@@ -81,28 +81,28 @@ abstract class Stock(final override val kodein: Kodein, final override val name:
             } catch (e: Exception) {
                 logger.error(e.message, e)
             }
-            delay(10, TimeUnit.SECONDS)
+            delay(TimeUnit.SECONDS.toMillis(10))
         }
     }
 
     fun getLocked(orderList: MutableList<Order> = activeList) = orderList.groupBy { it.getLockCur() }
             .map { it.key to it.value.sumByDecimal { it.getLockAmount() } }.toMap()
 
-    fun history(delay: Long = 10) = launch {
+    fun history(delay: Long = 10) = GlobalScope.launch {
         while (isActive) {
             db.getTransfer(name).let {
                 withContext(NonCancellable) { updateTransfer(it) }
-                delay(delay, TimeUnit.SECONDS)
+                delay(TimeUnit.SECONDS.toMillis(delay))
             }
         }
     }
 
-    fun updateDeposit(cur: String) = launch {
+    fun updateDeposit(cur: String) = GlobalScope.launch {
         db.getTransfer(name).filter { it.cur == cur }
                 .let { withContext(NonCancellable) { updateTransfer(it) } }
     }
 
-    fun infoPolling(delay: Long = 600) = launch {
+    fun infoPolling(delay: Long = 600) = GlobalScope.launch {
         val lastPair = db.getStockPairs(name)
         while (isActive) {
             withContext(NonCancellable) {
@@ -115,7 +115,7 @@ abstract class Stock(final override val kodein: Kodein, final override val name:
                     }
                 }
             }
-            delay(delay, TimeUnit.SECONDS)
+            delay(TimeUnit.SECONDS.toMillis(delay))
         }
     }
 
@@ -157,7 +157,7 @@ abstract class Stock(final override val kodein: Kodein, final override val name:
 
                         updateWallet = UpdateWallet(Pair(order.getToCur(), order.getPlayedAmount(update.amount)),
                                 Pair(order.getFromCur(), order.getLockAmount(update.amount)))
-                        launch(commonContext) { RutEx.botUpdate(order.botId, update) }
+                        GlobalScope.launch(commonContext) { RutEx.botUpdate(order.botId, update) }
                     } else {
 
                     }
@@ -166,7 +166,7 @@ abstract class Stock(final override val kodein: Kodein, final override val name:
                     logger.info("id: ${order.id}, order: ${order.stockOrderId} removing from orderList, status: ${order.status}")
                     activeList.remove(order)
                     updateWallet = UpdateWallet()
-                    launch(commonContext) { RutEx.botUpdate(order.botId, update) }
+                    GlobalScope.launch(commonContext) { RutEx.botUpdate(order.botId, update) }
                 }
             }
         }
@@ -178,13 +178,13 @@ abstract class Stock(final override val kodein: Kodein, final override val name:
         stateTime = time
 
         RutEx.stateLock.withLock {
-            fullState?.also { launch(commonContext) { db.saveBook(id, time, fullState = it) } }?.let {
+            fullState?.also { GlobalScope.launch(commonContext) { db.saveBook(id, time, fullState = it) } }?.let {
                 depthBook.replace(it)
                 updated.replace(it)
                 logger.debug("$name full state updated for (${it.pairs.size}) pairs")
             }
 
-            update?.also { launch(commonContext) { db.saveBook(id, time, it) } }?.onEach { upd ->
+            update?.also { GlobalScope.launch(commonContext) { db.saveBook(id, time, it) } }?.onEach { upd ->
                 if (depthBook.pairs[upd.pair]!![upd.type]!!.size < 2) {
                     logger.error("size < 2, pair: ${upd.pair}")
                 } else {
@@ -216,7 +216,7 @@ abstract class Stock(final override val kodein: Kodein, final override val name:
             val time = LocalDateTime.now().also { walletTime = it }
 
             mapOf(WalletType.AVAILABLE to available, WalletType.LOCKED to locked, WalletType.TOTAL to total).let {
-                launch { db.saveWallets(it, id, time) }
+                GlobalScope.launch { db.saveWallets(it, id, time) }
             }
 
             available.also { walletAvailable.putAll(it) }
