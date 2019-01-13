@@ -19,16 +19,19 @@ import api.IStock
 import api.OrderUpdate
 import bot.IWebSocket
 import bot.OKWebSocket
+import data.GetRates
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.apache.Apache
+import javafx.application.Application.launch
 import org.kodein.di.generic.*
+import web.RutexWeb
 import java.io.File
 import java.io.FileInputStream
 import java.util.*
 import javax.sql.DataSource
 import kotlin.reflect.full.primaryConstructor
 
-enum class Parameters { dbUrl, dbDriver, dbUser, dbPassword, testKeys }
+enum class Parameters { port, testKeys }
 
 object RutEx: KLoggable {
     init { System.setProperty(ContextInitializer.CONFIG_FILE_PROPERTY, "logback.xml") }
@@ -50,19 +53,21 @@ object RutEx: KLoggable {
         bind<DataSource>() with singleton { HikariDataSource(HikariConfig(hikariCfg)) }
         constant(Parameters.testKeys) with (File("Rutex.keys").takeIf { it.exists() }?.readText()
             ?.let { JSON.unquoted.parse(RutKeys.serializer(), it) } ?: RutData.getTestKeys())
+        constant(Parameters.port) with 9009
 
-        bind<IDb>() with singleton { Db(kodein) }
+                bind<IDb>() with singleton { Db(kodein) }
         bind<HttpClient>() with singleton { HttpClient(Apache) }
         bind<IWebSocket>() with provider { OKWebSocket() }
     }
 
     @JvmStatic
-    fun main(args: Array<String>) {
+    suspend fun main(args: Array<String>) {
         try {
-            Runtime.getRuntime().addShutdownHook(Thread { RutEx.stop() })
+            Runtime.getRuntime().addShutdownHook(Thread { runBlocking { RutEx.stop() } })
 
             logger.info { "start ${logger.name}" }
 
+            RutexWeb(kodein).start(true)
             start()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -73,19 +78,21 @@ object RutEx: KLoggable {
         botList[botId]?.orderUpdate(update)
     }
 
-    private fun start() = runBlocking {
+    suspend fun getState() = GetRates().also { controlChannel.send(it) }.data.await()
+
+    private suspend fun start() {
         RutData.getStocks().keys.associateTo(stockList) {
             it to Class.forName("api.$it").kotlin.primaryConstructor?.call(kodein) as IStock
         }.toMap()
 
         localState = LocalState(stockList, logger, kodein)
         mainHandler = mainHandler()
-        stockList.map { launch { it.value.start() } }.onEach { it.join() }
+        stockList.map { GlobalScope.launch { it.value.start() } }.onEach { it.join() }
     }
 
-    private fun stop() = runBlocking {
+    private suspend fun stop() {
         logger.info("stopping")
-        stockList.map { launch { it.value.stop() } }.onEach { it.join() }
+        stockList.map { GlobalScope.launch { it.value.stop() } }.onEach { it.join() }
         mainHandler.cancelAndJoin()
         logger.info("stopped")
     }
