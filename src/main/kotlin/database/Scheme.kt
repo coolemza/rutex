@@ -4,7 +4,8 @@ import org.jetbrains.exposed.sql.Table
 
 enum class BookType { asks, bids }
 enum class KeyType { WALLET, TRADE, ACTIVE, DEBUG, HISTORY, WITHDRAW }
-enum class OrderStatus { ACTIVE, PARTIAL, COMPLETED, CANCELED, FAILED }
+enum class OrderStatus { ACTIVE, PARTIAL, COMPLETED, CANCELED, FAILED, CANCEL_FAILED }
+enum class OperationType { buy, sell }
 enum class TransferStatus { PENDING, WAITING, SUCCESS, FAILED }
 enum class WalletType { AVAILABLE, LOCKED, TOTAL }
 
@@ -66,7 +67,8 @@ object Stock_Pair: Table() {
     val pair_id = integer("pair_id") references Pairs.id
     val stock_id = integer("stock_id") references Stocks.id
     val minAmount = decimal("min_amount", 20, 8)
-    val percent = decimal("percent", 20, 8)
+    val makerFee = decimal("maker_fee", 20, 8)
+    val takerFee = decimal("taker_fee", 20, 8)
     val enabled = bool("status") //TODO: refactor
     init { uniqueIndex(stock_id, pair_id) }
 }

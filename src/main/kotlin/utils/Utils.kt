@@ -9,7 +9,7 @@ import ch.qos.logback.core.rolling.TimeBasedRollingPolicy
 import data.DepthBook
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import stock.Update
+import api.Update
 import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -39,39 +39,6 @@ inline fun <T> Iterable<T>.sumByDecimal(selector: (T) -> BigDecimal): BigDecimal
         sum += selector(element)
     }
     return sum
-}
-
-
-fun getUpdate(curState: DepthBook, newState: DepthBook): List<Update>? {
-    val updList = mutableListOf<Update>()
-    newState.pairs.forEach { pair, p ->
-        p.forEach { type, _ ->
-            val newBook = newState.pairs[pair]!!.get(type)!!
-            val curBook = curState.pairs[pair]!!.get(type)!!
-            val newRates = newBook.map { it.rate }
-            val curRates = curBook.map { it.rate }
-
-            val updateRates = newRates.intersect(curRates)
-
-            updateRates.forEach { rate ->
-                newBook.find { it.rate == rate }?.let { new ->
-                    curBook.find { it.rate == rate }?.takeIf { it.amount.compareTo(new.amount) != 0 }
-                            ?.run { updList.add(Update(pair, type, new.rate, new.amount)) }
-                }
-            }
-
-            if (updateRates.size != newRates.size) {
-                (newRates - updateRates).forEach { rate ->
-                    newBook.find { it.rate == rate }?.let {
-                        updList.add(Update(pair, type, it.rate, it.amount))
-                    }
-                }
-
-                (curRates - updateRates).forEach { rate -> updList.add(Update(pair, type, rate)) }
-            }
-        }
-    }
-    return updList.takeIf { it.isNotEmpty() }?.let { updList }
 }
 
 fun local2joda(time: LocalDateTime): org.joda.time.LocalDateTime {

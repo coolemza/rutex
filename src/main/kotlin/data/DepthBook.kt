@@ -1,96 +1,182 @@
 package data
 
 import database.BookType
-import kotlinx.serialization.Serializable
-import stock.Update
+import api.Update
 
-@Serializable
-class DepthBook() {
-    val pairCount = mutableMapOf<String, Long>()
-    val pairs = mutableMapOf<String, MutableMap<BookType, MutableList<Depth>>>()
+class DepthList() : MutableList<Depth> by mutableListOf() {
+    var nonce: Int = 0
 
-    constructor(pair: String, depthLimit: Int = 0) : this() {
-        pairCount.put(pair, 0)
-        arrayOf(BookType.asks, BookType.bids).forEach { type ->
-            for (i in 0 until depthLimit) {
-                pairs.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(Depth())
+    var updated = true
+    var topUpdated = true
+
+    var lockCounter = 0
+
+    constructor(update: DepthList) : this() {
+        nonce = update.nonce
+        for (i in 0 until update.size) this.add(Depth(update[i]))
+    }
+
+    constructor(update: DepthList, depthLimit: Int) : this() {
+        nonce = update.nonce
+        val size = if (update.size < depthLimit) update.size else depthLimit
+        for (i in 0 until size) this.add(Depth(update[i]))
+    }
+
+    fun deepReplace(update: DepthList) {
+        if (update.nonce > nonce) {
+            nonce = update.nonce
+            updated = true
+
+            if (update.size > 0) {
+                if (size == 0 || update[0].rate != get(0).rate || update[0].amount != get(0).amount) {
+                    topUpdated = true
+                }
+            }
+
+            if (update.size == size) {
+                update.forEachIndexed { i, depth -> get(i).replace(depth) }
+            } else {
+                clear()
+                update.forEach { add(Depth(it)) }
+            }
+        } else {
+            updated = false
+            topUpdated = false
+        }
+    }
+
+    fun replaceFromList(update: List<*>, depthLimit: Int) {
+        val updateSize = if (update.size > depthLimit) depthLimit else update.size
+        if (updateSize == size) {
+            for (i in 0 until updateSize) {
+                val data = update[i] as List<*>
+                get(i).replace(data[0].toString(), data[1].toString())
+            }
+        } else {
+            clear()
+            for (i in 0 until updateSize) {
+                val data = update[i] as List<*>
+                add(Depth(data[0].toString(), data[1].toString()))
             }
         }
     }
 
-    constructor(update: DepthBook): this() {
-        update.pairs.forEach { pair, p ->
-            p.forEach { type ->
-                type.value.forEach { d ->
-                    pairs.getOrPut(pair) { mutableMapOf() }.getOrPut(type.key) { mutableListOf() }.add(Depth(d))
-                }
-            }
-        }
+    override fun toString(): String {
+        return "$nonce($updated|$topUpdated)"
+    }
+}
+
+class DepthType() : MutableMap<BookType, DepthList> by mutableMapOf() {
+
+    constructor(update: DepthType) : this() {
+        update.forEach { this[it.key] = DepthList(it.value) }
+    }
+
+    constructor(update: DepthType, depthLimit: Int) : this() {
+        update.forEach { this[it.key] = DepthList(it.value, depthLimit) }
+    }
+
+    fun deepReplace(update: DepthType) {
+        update.forEach { this.getOrPut(it.key) { DepthList() }.deepReplace(it.value) }
+    }
+
+    override fun toString(): String {
+        return this.asSequence().joinToString { "${it.key.name}: ${it.value}" }
+    }
+}
+
+class DepthBook() : MutableMap<String, DepthType> by mutableMapOf() {
+    val pairCount = mutableMapOf<String, Long>()
+    var nonce: Int = 0
+
+    constructor(update: DepthBook) : this() {
+        this.nonce = update.nonce
+        update.forEach { this[it.key] = DepthType(it.value) }
+    }
+
+    constructor(update: DepthBook, depthLimit: Int) : this() {
+        this.nonce = update.nonce
+        update.forEach { this[it.key] = DepthType(it.value, depthLimit) }
+    }
+
+    fun resetPair(pair: String) {
+        pairCount.remove(pair)
+        this.get(pair)?.forEach { it.value.clear() }
     }
 
     fun reset() {
         pairCount.clear()
-        pairs.clear()
+        forEach { it.value.forEach { it.value.clear() } }
     }
 
-//    constructor(pairs: Map<String, PairInfo>, depthLimit: Int = 0) : this() {
-//        pairs.forEach { val pair = it.key
-//            pairCount.put(pair, 0)
-//            arrayOf(BookType.asks, BookType.bids).forEach { type ->
-//                for (i in 0 until depthLimit) {
-//                    pairs.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.add(Depth())
-//                }
+    fun incLock(pair: String, type: BookType) = (this[pair]!![type]!!.lockCounter++)
+
+    fun decLock(pair: String, type: BookType) = (this[pair]!![type]!!.lockCounter--)
+
+    fun isLocked(pair: String, type: BookType) = this[pair]?.get(type)?.run { lockCounter > 0 } ?: false
+
+    fun clearBook() = this.forEach { it.value.forEach { it.value.clear() } }
+
+    fun deepReplace(update: DepthBook) {
+        this.nonce = update.nonce
+        update.forEach { this.getOrPut(it.key) { DepthType() }.deepReplace(it.value) }
+    }
+
+    fun replaceFromList(pair: String, type: String, data: List<*>, depthLimit: Int) {
+        getOrPut(pair) { DepthType() }.getOrPut(BookType.valueOf(type)) { DepthList() }
+            .replaceFromList(data, depthLimit)
+//        val updateSize = if (data.size > depthLimit) depthLimit else data.size
+//        val curList = getOrPut(pair) { DepthType() }.getOrPut(BookType.valueOf(type)) { DepthList() }
+//
+//        if (updateSize == size) {
+//            for (i in 0 until updateSize) {
+//                (data[i] as List<*>).let { curList.get(i).replace(it[0].toString(), it[1].toString()) }
+//            }
+//        } else {
+//            curList.clear()
+//            for (i in 0 until updateSize) {
+//                (data[i] as List<*>).let { curList.add(Depth(it[0].toString(), it[1].toString())) }
 //            }
 //        }
-//    }
+    }
 
-    fun replace(update: DepthBook) {
-        update.pairs.forEach { (pair, p) ->
-            p.forEach { (type, t) ->
-                t.forEachIndexed { i, depth ->
-                    pairs.getOrPut(pair) { mutableMapOf() }.getOrPut(type) { mutableListOf() }.run {
-                        getOrNull(i)?.replace(depth) ?: add(i, Depth(depth))
-                    }
-                }
+    fun removeRate(upd: Update): Int? = this[upd.pair]?.get(upd.type)?.let {
+        it.nonce ++
+        it.indexOfFirst { it.rate == upd.rate }.let { index ->
+            if (index == -1) {
+                return null
+            } else {
+                return it.remove(it[index]).takeIf { it }?.run { index }
             }
         }
     }
 
-    fun removeRate(upd: Update): Boolean {
-        this.pairs[upd.pair]?.get(upd.type)?.let {
-            it.indexOfFirst { it.rate == upd.rate }.let { index ->
-                if (index == -1) {
-                    return false
+    fun updateRate(upd: Update): Int? = this[upd.pair]?.get(upd.type)?.let {
+        it.nonce ++
+        when (val index = it.indexOfFirst { it.rate == upd.rate }) {
+            -1 -> {
+                val indexToInsert = when (upd.type) {
+                    BookType.asks -> it.indexOfFirst { it.rate > upd.rate }
+                    BookType.bids -> it.indexOfFirst { it.rate < upd.rate }
+                }
+
+                if (indexToInsert == -1) {
+                    it.add(Depth(upd.rate, upd.amount!!))
+                    return it.size
                 } else {
-                    return it.remove(it[index])
+                    it.add(indexToInsert, Depth(upd.rate, upd.amount!!))
+                    return indexToInsert
                 }
             }
+            else -> {
+                it.get(index).amount = upd.amount!!
+                return index
+            }
         }
-        return false
     }
 
-    fun updateRate(upd: Update): Boolean {
-        this.pairs[upd.pair]?.get(upd.type)?.let {
-            val index = it.indexOfFirst { it.rate == upd.rate }
-            when (index) {
-                -1 -> {
-                    val indexToInsert = when (upd.type) {
-                        BookType.asks -> it.indexOfFirst { it.rate > upd.rate }
-                        BookType.bids -> it.indexOfFirst { it.rate < upd.rate }
-                    }
 
-                    when (indexToInsert) {
-                        -1 -> it.add(Depth(upd.rate, upd.amount!!))
-                        else -> it.add(indexToInsert, Depth(upd.rate, upd.amount!!))
-                    }
-                    return true
-                }
-                else -> {
-                    it.get(index).amount = upd.amount!!
-                    return true
-                }
-            }
-        }
-        return false
+    override fun toString(): String {
+        return "nonce: $nonce ${this.asSequence().joinToString { "${it.key}: ${it.value}" }}"
     }
 }

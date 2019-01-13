@@ -1,9 +1,9 @@
 package database
 
+import api.stocks.Bitfinex
+import api.stocks.Kraken
+import api.stocks.WEX
 import kotlinx.serialization.Serializable
-import stock.Bitfinex
-import stock.Kraken
-import stock.WEX
 
 @Serializable
 data class Key(val key: String, val secret: String, val type: KeyType)
@@ -68,10 +68,14 @@ object RutData {
 
     fun P(cur1: C, cur2: C) = "${cur1.name}_${cur2.name}"
 
-    fun getStockPairs(): Map<String, List<String>> {
+    fun getStockPairs(): Map<String, Map<String, String>> {
         return mapOf(
-                "WEX" to WEX.Pairs,
-                "Kraken" to Kraken.Pairs
+            Bitfinex.name to Bitfinex.Pairs,
+            WEX.name to  WEX.Pairs,
+//                CEX.name to  CEX.Pairs,
+//                Poloniex.name to Poloniex.Pairs,
+            Kraken.name to Kraken.Pairs
+//                Huobi.name to Huobi.Pairs
         )
     }
 

@@ -1,6 +1,5 @@
 package database
 
-import data.DepthBook
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.kodein.di.Kodein
@@ -8,22 +7,17 @@ import org.kodein.di.KodeinAware
 import org.kodein.di.direct
 import org.kodein.di.generic.instance
 import org.kodein.di.newInstance
-import stock.Transfer
-import stock.Update
+import api.Transfer
 import utils.local2joda
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
+import javax.sql.DataSource
 
 open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
-    val db = kodein.direct.run {
-        newInstance {
-            Database.connect(
-                instance(Parameters.dbUrl), instance(Parameters.dbDriver),
-                instance(Parameters.dbUser), instance(Parameters.dbPassword)
-            )
-        }
+    init {
+        kodein.direct.newInstance { Database.connect(kodein.direct.instance<DataSource>()) }
     }
 
     init {
@@ -40,15 +34,15 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
             Pair(initCurrency(it, crypto), crypto)
         }
 
-        val pairs = RutData.getStockPairs().map { it.value }.reduce { a, b -> a + b }.toSet().associateBy({ it }) { initPair(it) }
+        val pairs = RutData.getStockPairs().map { it.value.keys }.reduce { a, b -> a + b }.toSet().associateBy({ it }) { initPair(it) }
 
         stocks.forEach { stock, stockId ->
-            RutData.getStockPairs()[stock]!!.map { it.split("_") }.reduce { a, b -> a + b }.toSet().sorted().forEach {
-                initStockCurrency(stockId, currencies[it]!!.first, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ONE, "", "")
+            RutData.getStockPairs()[stock]!!.map { it.key.split("_") }.reduce { a, b -> a + b }.toSet().sorted().forEach {
+                initStockCurrency(stockId, currencies[it]!!.first, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, "", "")
             }
 
             RutData.getStockPairs()[stock]!!.forEach {
-                initStockPair(stockId, pairs[it]!!, BigDecimal("0.002"), BigDecimal("0.001"))
+                initStockPair(stockId, pairs[it.key]!!, BigDecimal.ZERO, BigDecimal.ZERO)
             }
         }
 
@@ -105,17 +99,26 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
 
     override fun getStockPairs(name: String) = transaction {
         Stock_Pair.innerJoin(Pairs).innerJoin(Stocks)
-                .select { Stocks.name.eq(name) and Stock_Pair.enabled }
-                .groupBy { it[Pairs.type] }.entries
-                .associateBy({ it.key }) { PairInfo(it.value[0][Pairs.id], it.value[0][Stock_Pair.id], it.value[0][Stock_Pair.minAmount]) }
+            .select { Stocks.name.eq(name) and Stock_Pair.enabled }
+            .groupBy { it[Pairs.type] }.entries
+            .associateBy({ it.key }) { sp ->
+                sp.value[0].let {
+                    PairInfo(it[Pairs.id], it[Stock_Pair.id], TradeFee(minAmount = it[Stock_Pair.minAmount],
+                        makerFee = it[Stock_Pair.makerFee], takerFee = it[Stock_Pair.takerFee]))
+                }
+            }
     }
 
     override fun getStockCurrencies(name: String): Map<String, StockCurrencyInfo> = transaction {
         Stock_Currency.innerJoin(Stocks).innerJoin(Currencies)
-                .select { Stock_Currency.enabled.eq(true) and Stocks.name.eq(name) }
-                .associateBy({ it[Currencies.type] }) {
-                    StockCurrencyInfo(it[Stock_Currency.id])
-                }
+            .select { Stock_Currency.enabled.eq(true) and Stocks.name.eq(name) }
+            .associateBy({ it[Currencies.type] }) {
+                StockCurrencyInfo(curId = it[Stock_Currency.currency_id],
+                    fee = CrossFee(withdrawFee = Fee(percent = it[Stock_Currency.withdraw_percent], min = it[Stock_Currency.withdraw_min]),
+                        depositFee = Fee(percent = it[Stock_Currency.withdraw_percent], min = it[Stock_Currency.deposit_min])),
+                    address = it[Stock_Currency.address],
+                    tag = it[Stock_Currency.tag])
+            }
     }
 
     override fun saveNonce(key: StockKey) {
@@ -132,39 +135,39 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
 
     override fun getStockInfo(name: String) = stocks[name]!!
 
-    override fun saveBook(stockId: Int, time: LocalDateTime, update: List<Update>?, fullState: DepthBook?) {
-        fullState?.let {
-            data class BookData(val stockId: Int, val pairId: Int, val type: BookType, val rate: BigDecimal, val amount: BigDecimal)
-
-            val cc = it.pairs.map { (pair, p) -> p.map { (type, t) -> t.map { BookData(stockId, pairs[pair]!!, type, it.rate, it.amount) } } }
-                    .reduce { a, b -> a + b }.reduce { a, b -> a + b }
-            transaction {
-                Rates.batchInsert(cc)
-                {
-                    this[Rates.date] = local2joda(time).toDateTime()
-                    this[Rates.type] = it.type
-                    this[Rates.stock_id] = stockId
-                    this[Rates.pair_id] = it.pairId
-                    this[Rates.rate] = it.rate
-                    this[Rates.amount] = it.amount
-                    this[Rates.full] = true
-                }
-            }
-        }
-        update?.let {
-            transaction {
-                Rates.batchInsert(it)
-                {
-                    this[Rates.date] = local2joda(time).toDateTime()
-                    this[Rates.type] = it.type
-                    this[Rates.stock_id] = stockId
-                    this[Rates.pair_id] = pairs[it.pair]!!
-                    this[Rates.rate] = it.rate
-                    this[Rates.amount] = it.amount
-                }
-            }
-        }
-    }
+//    override fun saveBook(stockId: Int, time: LocalDateTime, update: List<Update>?, fullState: DepthBook?) {
+//        fullState?.let {
+//            data class BookData(val stockId: Int, val pairId: Int, val type: BookType, val rate: BigDecimal, val amount: BigDecimal)
+//
+//            val cc = it.pairs.map { (pair, p) -> p.map { (type, t) -> t.map { BookData(stockId, pairs[pair]!!, type, it.rate, it.amount) } } }
+//                    .reduce { a, b -> a + b }.reduce { a, b -> a + b }
+//            transaction {
+//                Rates.batchInsert(cc)
+//                {
+//                    this[Rates.date] = local2joda(time).toDateTime()
+//                    this[Rates.type] = it.type
+//                    this[Rates.stock_id] = stockId
+//                    this[Rates.pair_id] = it.pairId
+//                    this[Rates.rate] = it.rate
+//                    this[Rates.amount] = it.amount
+//                    this[Rates.full] = true
+//                }
+//            }
+//        }
+//        update?.let {
+//            transaction {
+//                Rates.batchInsert(it)
+//                {
+//                    this[Rates.date] = local2joda(time).toDateTime()
+//                    this[Rates.type] = it.type
+//                    this[Rates.stock_id] = stockId
+//                    this[Rates.pair_id] = pairs[it.pair]!!
+//                    this[Rates.rate] = it.rate
+//                    this[Rates.amount] = it.amount
+//                }
+//            }
+//        }
+//    }
 
     override fun saveWallets(data: Map<WalletType, Map<String, BigDecimal>>, stockId: Int, time: LocalDateTime) {
         class WalletData(val cur_id: Int, val type: WalletType, val amount: BigDecimal)
@@ -187,6 +190,29 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
                 this[Wallet.stock_id] = stockId
                 this[Wallet.amount] = it.amount
             }
+        }
+    }
+
+    override fun updateCrossFee(update: Map<String, CrossFee>, stockName: String) = transaction {
+        update.forEach { cur, fee ->
+            Stock_Currency.update({ Stock_Currency.currency_id.eq(currencies[cur]!!.id) and
+                    Stock_Currency.stock_id.eq(stocks[stockName]!!.id) }) {
+                it[Stock_Currency.deposit_min] = fee.depositFee.min
+                it[Stock_Currency.deposit_percent] = fee.depositFee.percent
+                it[Stock_Currency.withdraw_min] = fee.withdrawFee.min
+                it[Stock_Currency.withdraw_percent] = fee.withdrawFee.percent
+            }
+        }
+    }
+
+    override fun updateTradeFee(update: Map<String, TradeFee>, stockName: String) = transaction {
+        update.forEach { p ->
+            Stock_Pair.innerJoin(Pairs).innerJoin(Stocks)
+                .update({ Pairs.type.eq(p.key) and Stocks.name.eq(stockName) }) {
+                    it[Stock_Pair.minAmount] = p.value.minAmount
+                    it[Stock_Pair.makerFee] = p.value.makerFee
+                    it[Stock_Pair.takerFee] = p.value.takerFee
+                }
         }
     }
 
@@ -266,13 +292,14 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
         }
     }
 
-    override fun initStockPair(stockId: Int, pairId: Int, percent: BigDecimal, minAmount: BigDecimal) {
+    private fun initStockPair(stockId: Int, pairId: Int, percent: BigDecimal, minAmount: BigDecimal) {
         transaction {
             Stock_Pair.insertIgnore {
                 it[stock_id] = stockId
                 it[pair_id] = pairId
                 it[enabled] = true
-                it[Stock_Pair.percent] = percent
+                it[Stock_Pair.makerFee] = percent
+                it[Stock_Pair.takerFee] = percent
                 it[Stock_Pair.minAmount] = minAmount
             }
         }

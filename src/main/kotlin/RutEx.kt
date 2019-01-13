@@ -1,45 +1,59 @@
 import bots.IBot
+import bots.LocalState
 import ch.qos.logback.classic.util.ContextInitializer
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
+import data.ControlMsg
 //import com.github.salomonbrys.kodein.Kodein
 //import com.github.salomonbrys.kodein.bind
 //import com.github.salomonbrys.kodein.singleton
 //import com.github.salomonbrys.kodein.with
 import database.*
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.serialization.ImplicitReflectionSerializer
 import kotlinx.serialization.json.JSON
-import kotlinx.serialization.parse
 import mu.KLoggable
 import org.kodein.di.Kodein
-import org.kodein.di.generic.bind
-import org.kodein.di.generic.singleton
-import org.kodein.di.generic.with
-import stock.IStock
-import stock.OrderUpdate
+import api.IStock
+import api.OrderUpdate
+import bot.IWebSocket
+import bot.OKWebSocket
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.apache.Apache
+import org.kodein.di.generic.*
 import java.io.File
+import java.io.FileInputStream
+import java.util.*
+import javax.sql.DataSource
 import kotlin.reflect.full.primaryConstructor
 
 enum class Parameters { dbUrl, dbDriver, dbUser, dbPassword, testKeys }
 
 object RutEx: KLoggable {
     init { System.setProperty(ContextInitializer.CONFIG_FILE_PROPERTY, "logback.xml") }
+    val hikariCfg = Properties().apply { load(FileInputStream("hikari.properties")) }
+
     override val logger = logger()
 
     val stateLock = Mutex()
-    private lateinit var stocks: Map<String, IStock>
+    var stockList = mutableMapOf<String, IStock>()
     private val botList = mutableMapOf<Int, IBot>()
 
-    @UseExperimental(ImplicitReflectionSerializer::class)
+    lateinit var localState: LocalState
+
+    lateinit var mainHandler: Job
+    val handler = CoroutineExceptionHandler { _, e -> logger.error(e.message, e) }
+    val controlChannel = Channel<ControlMsg>(capacity = Channel.UNLIMITED)
+
     val kodein = Kodein {
-        constant(Parameters.dbUrl) with "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
-        constant(Parameters.dbDriver) with "org.h2.Driver"
-        constant(Parameters.dbUser) with ""
-        constant(Parameters.dbPassword) with ""
-        constant(Parameters.testKeys) with (File("Rutex.keys").takeIf { it.exists() }?.readText()?.let { JSON.unquoted.parse<RutKeys>(it) } ?: RutData.getTestKeys())
+        bind<DataSource>() with singleton { HikariDataSource(HikariConfig(hikariCfg)) }
+        constant(Parameters.testKeys) with (File("Rutex.keys").takeIf { it.exists() }?.readText()
+            ?.let { JSON.unquoted.parse(RutKeys.serializer(), it) } ?: RutData.getTestKeys())
 
         bind<IDb>() with singleton { Db(kodein) }
+        bind<HttpClient>() with singleton { HttpClient(Apache) }
+        bind<IWebSocket>() with provider { OKWebSocket() }
     }
 
     @JvmStatic
@@ -60,16 +74,33 @@ object RutEx: KLoggable {
     }
 
     private fun start() = runBlocking {
-        stocks = RutData.getStocks().keys.map {
-            it to Class.forName("stock.$it").kotlin.primaryConstructor?.call(kodein) as IStock
+        RutData.getStocks().keys.associateTo(stockList) {
+            it to Class.forName("api.$it").kotlin.primaryConstructor?.call(kodein) as IStock
         }.toMap()
 
-        stocks.map { launch { it.value.start() } }.onEach { it.join() }
+        localState = LocalState(stockList, logger, kodein)
+        mainHandler = mainHandler()
+        stockList.map { launch { it.value.start() } }.onEach { it.join() }
     }
 
     private fun stop() = runBlocking {
         logger.info("stopping")
-        stocks.map { launch { it.value.stop() } }.onEach { it.join() }
+        stockList.map { launch { it.value.stop() } }.onEach { it.join() }
+        mainHandler.cancelAndJoin()
         logger.info("stopped")
+    }
+
+    fun mainHandler() = GlobalScope.launch(handler) {
+        while (isActive) {
+            stockList.forEach {
+                var msg = controlChannel.poll()
+                while (msg != null) {
+                    localState.onReceive(msg)
+                    msg = controlChannel.poll()
+                }
+
+                it.value.depthChannel.poll()?.let { localState.onReceive(it) }
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 package bots
 
-import stock.OrderUpdate
+import api.OrderUpdate
 
 interface IBot {
     fun orderUpdate(update: OrderUpdate)
