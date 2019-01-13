@@ -1,4 +1,4 @@
-package bots
+package state
 
 import mu.KLogger
 import api.IStock

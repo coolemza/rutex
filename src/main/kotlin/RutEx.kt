@@ -1,5 +1,4 @@
-import bots.IBot
-import bots.LocalState
+import state.LocalState
 import ch.qos.logback.classic.util.ContextInitializer
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -16,13 +15,11 @@ import kotlinx.serialization.json.JSON
 import mu.KLoggable
 import org.kodein.di.Kodein
 import api.IStock
-import api.OrderUpdate
 import bot.IWebSocket
 import bot.OKWebSocket
 import data.GetRates
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.apache.Apache
-import javafx.application.Application.launch
 import org.kodein.di.generic.*
 import web.RutexWeb
 import java.io.File
@@ -41,7 +38,6 @@ object RutEx: KLoggable {
 
     val stateLock = Mutex()
     var stockList = mutableMapOf<String, IStock>()
-    private val botList = mutableMapOf<Int, IBot>()
 
     lateinit var localState: LocalState
 
@@ -72,10 +68,6 @@ object RutEx: KLoggable {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-    }
-
-    fun botUpdate(botId: Int, update: OrderUpdate) {
-        botList[botId]?.orderUpdate(update)
     }
 
     suspend fun getState() = GetRates().also { controlChannel.send(it) }.data.await()

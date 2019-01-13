@@ -1,4 +1,4 @@
-package bots
+package state
 
 import data.*
 import database.CrossFee
