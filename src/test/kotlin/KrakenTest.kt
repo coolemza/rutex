@@ -1,7 +1,9 @@
 import database.OperationType
+import kotlinx.serialization.ImplicitReflectionSerializer
+import org.junit.Assume
 import org.junit.jupiter.api.Test
 
-class KrakenTest : StockTest("Kraken", RutEx.kodein) {
+class KrakenTest : StockTest("Kraken", kodein) {
 
     @Test
     fun currencyInfo() = testCurrencyInfo()
@@ -10,12 +12,20 @@ class KrakenTest : StockTest("Kraken", RutEx.kodein) {
     fun info() = testPairInfo()
 
     @Test
-    fun wallet() = testWallet("ltc")
+    fun wallet() {
+        Assume.assumeNotNull(stock.infoKey)
+
+        testWallet("ltc")
+    }
 
     @Test
     fun depth() = testDepth("ltc_usd")
 
     @Test
-    fun ordersPutCancel() = testOrderLiveCycle("ltc_usd", OperationType.sell)
+    fun ordersPutCancel() = {
+        Assume.assumeNotNull(stock.infoKey)
+
+        testOrderLiveCycle("ltc_usd", OperationType.sell)
+    }
 
 }

@@ -44,12 +44,12 @@ class Bitfinex(kodein: Kodein): WebSocketStock(kodein, name) {
         }
     }
 
-    override suspend fun deposit(lastId: Long, transfers: List<Transfer>, key: StockKey): Pair<Long, List<TransferUpdate>> {
+    override suspend fun deposit(lastId: Long, transfers: List<Transfer>): Pair<Long, List<TransferUpdate>> {
 
         val tu = transfers.map { transfer ->
             logger.info("txId(${transfer.tId}) status ${transfer.status}")
             var status = transfer.status
-            apiRequest("history/movements", key, mapOf("method" to getWithdrawSymbol(transfer.cur)), 10000)?.let { res ->
+            apiRequest("history/movements", mapOf("method" to getWithdrawSymbol(transfer.cur)), timeOut = 10000)?.let { res ->
                 (res as List<*>).find { (it as Map<*,*>)["txid"].toString() == transfer.tId }.let { (it as Map<*, *>) }.let {
                     logger.info("txId(${it["txid"]}) found status ${it["status"]}")
                     status = when (it["status"].toString()) {
@@ -70,38 +70,47 @@ class Bitfinex(kodein: Kodein): WebSocketStock(kodein, name) {
             ?: throw Exception((res as JSONObject)["message"].toString())
     }
 
-    override suspend fun balance(key: StockKey): Map<String, BigDecimal>? = apiRequest("balances", key)?.let { res ->
+    override suspend fun balance(): Map<String, BigDecimal>? = apiRequest("balances")?.let { res ->
         (res as List<*>).filter { (it as Map<*, *>)["type"] == "exchange" }
             .map { (it as Map<*, *>)["currency"] as String to BigDecimal((it)["available"] as String) }
             .filter { currencies.containsKey(it.first) }.toMap()
     }
 
-    override suspend fun apiRequest(cmd: String, key: StockKey, data: Map<String, Any>?, timeOut: Long): Any? {
-        val params = JSONObject(mutableMapOf("request" to privateApi(cmd).second, "nonce" to "${++key.nonce}"))
-        if (null != data) {
-            when (data) {
-                is JSONArray -> params["orders"] = data
-                else -> params.putAll(data)
+    suspend fun apiRequest(cmd: String, data: Map<String, Any>? = null, key: StockKey? = infoKey, timeOut: Long = 2000): Any? {
+        key?.let {
+            val params = JSONObject(mutableMapOf("request" to privateApi(cmd).second, "nonce" to "${++key.nonce}"))
+            if (null != data) {
+                when (data) {
+                    is JSONArray -> params["orders"] = data
+                    else -> params.putAll(data)
+                }
             }
+
+            val payload = Base64.getEncoder().encodeToString(params.toJSONString().toByteArray())
+
+            val mac = Mac.getInstance("HmacSHA384")
+            mac.init(SecretKeySpec(key.secret.toByteArray(), "HmacSHA384"))
+            val sign = String.format("%096x", BigInteger(1, mac.doFinal(payload.toByteArray()))).toLowerCase()
+
+            return parseJsonResponse(
+                http.post(
+                    logger,
+                    privateApi(cmd).first,
+                    mapOf("X-BFX-APIKEY" to key.key, "X-BFX-PAYLOAD" to payload, "X-BFX-SIGNATURE" to sign),
+                    payload
+                )
+            )
         }
-
-        val payload = Base64.getEncoder().encodeToString(params.toJSONString().toByteArray())
-
-        val mac = Mac.getInstance("HmacSHA384")
-        mac.init(SecretKeySpec(key.secret.toByteArray(), "HmacSHA384"))
-        val sign = String.format("%096x", BigInteger(1, mac.doFinal(payload.toByteArray()))).toLowerCase()
-
-        return parseJsonResponse(http.post(logger, privateApi(cmd).first, mapOf("X-BFX-APIKEY" to key.key, "X-BFX-PAYLOAD" to payload, "X-BFX-SIGNATURE" to sign), payload))
     }
 
-    override suspend fun currencyInfo(key: StockKey) = apiRequest("account_fees", key)?.let { res ->
+    override suspend fun currencyInfo() = apiRequest("account_fees")?.let { res ->
         ((res as Map<*, *>)["withdraw"] as Map<*, *>)
             .map { it.key as String to CrossFee(withdrawFee = Fee(min = BigDecimal(it.value.toString()))) }
             .filter { currencies.containsKey(rutSymbol(it.first)) }
             .map { rutSymbol(it.first) to it.second }.toMap()
     }
 
-    override suspend fun pairInfo(key: StockKey) = apiRequest("account_infos", key)?.let { res ->
+    override suspend fun pairInfo() = apiRequest("account_infos")?.let { res ->
         val (makerFee, takerFee) = ((res as List<*>)[0] as Map<*, *>).let { Pair(it["maker_fees"], it["taker_fees"]) }
 
         parseJsonResponse(http.get(logger, privateApi("symbols_details").first))?.let { sd ->
@@ -147,7 +156,7 @@ class Bitfinex(kodein: Kodein): WebSocketStock(kodein, name) {
             list.filter { (it as List<*>)[0] == "exchange" }
                 .map { ((it as List<*>)[1] as String).toLowerCase() to BigDecimal(it[2].toString()) }
                 .filter { currencies.containsKey(it.first) }.let { update.putAll(it) }
-            RutEx.controlChannel.offer(UpdateWallet(name, update = update))
+            updateWallet(UpdateWallet(name, update = update))
         }
 
         oneCur?.let { item ->
@@ -219,7 +228,7 @@ class Bitfinex(kodein: Kodein): WebSocketStock(kodein, name) {
     }
 
     override suspend fun orderInfo(order: Order, updateTotal: Boolean) =
-        apiRequest("order/status", infoKey, mapOf("order_id" to order.stockOrderId.toLong()))?.let {
+        apiRequest("order/status", mapOf("order_id" to order.stockOrderId.toLong()), infoKey)?.let {
             val res = it as Map<*, *>
             val remaining = BigDecimal(res["remaining_amount"].toString())
             val status = if (res["is_live"].toString().toBoolean()) {
@@ -350,21 +359,27 @@ class Bitfinex(kodein: Kodein): WebSocketStock(kodein, name) {
     }
 
     override suspend fun loginPrivateSocket(socket: IWebSocket) {
-        socket.send(JSONObject(mapOf("event" to "conf", "flags" to 65536)).toJSONString())
+        activeKey?.let {
+            socket.send(JSONObject(mapOf("event" to "conf", "flags" to 65536)).toJSONString())
 
-        val nonce = Instant.ofEpochSecond(0L).until(Instant.now(), ChronoUnit.SECONDS).toString()
-        val payload = "AUTH$nonce"
-        val sign = Mac.getInstance("HmacSHA384")
-            .apply { init(SecretKeySpec(walletKey.secret.toByteArray(), "HmacSHA384")) }
-            .doFinal(payload.toByteArray())
+            val nonce = Instant.ofEpochSecond(0L).until(Instant.now(), ChronoUnit.SECONDS).toString()
+            val payload = "AUTH$nonce"
+            val sign = Mac.getInstance("HmacSHA384")
+                .apply { init(SecretKeySpec(it.secret.toByteArray(), "HmacSHA384")) }
+                .doFinal(payload.toByteArray())
 
-        val cmd = JSONObject(mapOf("apiKey" to walletKey.key,
-            "event" to "auth",
-            "authPayload" to payload,
-            "authNonce" to nonce,
-            "authSig" to String.format("%X", BigInteger(1, sign)).toLowerCase()))
+            val cmd = JSONObject(
+                mapOf(
+                    "apiKey" to it.key,
+                    "event" to "auth",
+                    "authPayload" to payload,
+                    "authNonce" to nonce,
+                    "authSig" to String.format("%X", BigInteger(1, sign)).toLowerCase()
+                )
+            )
 
-        socket.send(cmd.toJSONString())
+            socket.send(cmd.toJSONString())
+        }
     }
 
     override suspend fun loginBookSocket(socket: IWebSocket) {
@@ -385,7 +400,7 @@ class Bitfinex(kodein: Kodein): WebSocketStock(kodein, name) {
         val data = mapOf("amount" to transfer.amount.toPlainString(), "withdraw_type" to getWithdrawSymbol(transfer.cur),
             "walletselected" to "exchange", "address" to transfer.address.first)
 
-        return apiRequest("withdraw", withdrawKey, data)?.let {
+        return apiRequest("withdraw", data, withdrawKey)?.let {
             val res = ((it as List<*>).first() as Map<*, *>)
             if (res["status"] == "success") {
                 Pair(TransferStatus.PENDING, res["withdrawal_id"].toString())

@@ -25,43 +25,53 @@ class WEX(kodein: Kodein): RestStock(kodein, name) {
 
     private val privateApi = "$site/tapi/"
 
-    override suspend fun apiRequest(cmd: String, key: StockKey, data: Map<String, Any>?, timeOut: Long): Any? {
-        logger.trace("in key - $key")
-        val params = mutableMapOf<String, Any>("method" to cmd, "nonce" to "${++key.nonce}").apply { data?.let { putAll(it) } }
+    suspend fun apiRequest(cmd: String, data: Map<String, Any>? = null, key: StockKey? = infoKey, timeOut: Long = 2000): Any? {
+        key?.let {
+            logger.trace("in key - $key")
+            val params = mutableMapOf<String, Any>(
+                "method" to cmd,
+                "nonce" to "${++key.nonce}"
+            ).apply { data?.let { putAll(it) } }
 //        data?.let { (it as Map<*, *>).forEach { params[it.key as String] = "${it.value}" } }
 
-        val postData = params.entries.joinToString("&") { "${URLEncoder.encode(it.key, "UTF-8")}=${URLEncoder.encode(it.value.toString(), "UTF-8")}" }
+            val postData = params.entries.joinToString("&") {
+                "${URLEncoder.encode(
+                    it.key,
+                    "UTF-8"
+                )}=${URLEncoder.encode(it.value.toString(), "UTF-8")}"
+            }
 
-        val mac = Mac.getInstance("HmacSHA512")
-        mac.init(SecretKeySpec(key.secret.toByteArray(), "HmacSHA512"))
-        val sign = Hex.encodeHexString(mac.doFinal(postData.toByteArray(charset("UTF-8"))))
+            val mac = Mac.getInstance("HmacSHA512")
+            mac.init(SecretKeySpec(key.secret.toByteArray(), "HmacSHA512"))
+            val sign = Hex.encodeHexString(mac.doFinal(postData.toByteArray(charset("UTF-8"))))
 
-        logger.trace("out key - $key")
+            logger.trace("out key - $key")
 
-        return parseJsonResponse(http.post(logger, privateApi, mapOf("Key" to key.key, "Sign" to sign), postData))
+            return parseJsonResponse(http.post(logger, privateApi, mapOf("Key" to key.key, "Sign" to sign), postData))
+        }
     }
 
-    override suspend fun balance(key: StockKey): Map<String, BigDecimal>? = apiRequest("getInfo", key)?.let { res ->
+    override suspend fun balance(): Map<String, BigDecimal>? = apiRequest("getInfo")?.let { res ->
         (((res as Map<*, *>)["return"] as Map<*, *>)["funds"] as Map<*, *>)
             .filter { currencies.containsKey(it.key.toString()) }
             .map { it.key.toString() to BigDecimal(it.value.toString()) }.toMap()
     }
 
     override suspend fun cancelOrders(orders: List<Order>) = parallelOrders(orders) { order, key ->
-        apiRequest("CancelOrder", key, mapOf("order_id" to order.stockOrderId))?.let {
+        apiRequest("CancelOrder", mapOf("order_id" to order.stockOrderId), key)?.let {
             logger.info("order_id: ${((it as Map<*, *>)["return"] as Map<*, *>)["order_id"]} canceled")
 //            state.onActive(order.id, order.order_id, status = OrderStatus.CANCELED)
             OrderUpdate(order.id, order.stockOrderId, order.amount, OrderStatus.CANCELED)
         } ?: logger.error("Order cancelling failed: $order").run { OrderUpdate(order.id, order.stockOrderId, order.amount, OrderStatus.CANCEL_FAILED) }
     }
 
-    override suspend fun deposit(lastId: Long, transfers: List<Transfer>, key: StockKey): Pair<Long, List<TransferUpdate>> {
+    override suspend fun deposit(lastId: Long, transfers: List<Transfer>): Pair<Long, List<TransferUpdate>> {
         var newLastId = lastId
         var stopIncrement = false
         val tu = mutableListOf<TransferUpdate>()
         val param = mapOf("order" to "DESC", "from_id" to lastId.toString())
 
-        apiRequest("TransHistory", key, param)?.also { res ->
+        apiRequest("TransHistory", param)?.also { res ->
             //TODO: int or Long? or String?
             val list = ((res as Map<*, *>)["return"] as Map<*, *>).map { it.key as String to it.value }.toMap().toSortedMap()
             if (list.containsKey(lastId.toString())) {
@@ -111,13 +121,13 @@ class WEX(kodein: Kodein): RestStock(kodein, name) {
         .takeIf { !it.contains("success") || it["success"] == 1L || it["error"] == "no orders" }
         ?: throw Exception(res["error"].toString())
 
-    override suspend fun currencyInfo(key: StockKey): Map<String, CrossFee>? {
+    override suspend fun currencyInfo(): Map<String, CrossFee>? {
         val html = Jsoup.connect(feeUrl).userAgent(userAgent).get()
         val list = html.select("table").select("tr").drop(4).dropLast(6).map { it.select("td")[0].text() to it.select("td")[2].text() }
         return list.map { rutSymbol(it.first) to CrossFee(withdrawFee = Fee(min = BigDecimal(it.second.split(" ")[0]))) }.toMap()
     }
 
-    override suspend fun pairInfo(key: StockKey): Map<String, TradeFee>? {
+    override suspend fun pairInfo(): Map<String, TradeFee>? {
         return parseJsonResponse(http.post(logger, infoUrl))?.let { res ->
             ((res as Map<*, *>)["pairs"] as Map<*, *>).filter { pairs.containsKey(it.key.toString()) }.map {
                 it.key.toString() to TradeFee(
@@ -129,7 +139,7 @@ class WEX(kodein: Kodein): RestStock(kodein, name) {
     }
 
     override suspend fun orderInfo(order: Order, updateTotal: Boolean): OrderUpdate? {
-        return apiRequest("OrderInfo", activeKey, mapOf("order_id" to order.stockOrderId))?.let {
+        return apiRequest("OrderInfo", mapOf("order_id" to order.stockOrderId), activeKey)?.let {
             //TODO: int or Long? or String?
             val res = ((it as Map<*, *>)["return"] as Map<*, *>).values.first() as Map<*, *>
             val partialAmount = BigDecimal(res["amount"].toString())
@@ -149,7 +159,7 @@ class WEX(kodein: Kodein): RestStock(kodein, name) {
             "amount" to order.amount.toString())
         logger.info("send to play ${params.entries.joinToString { "${it.key}:${it.value}" }}")
 
-        apiRequest("Trade", key, params)?.let {
+        apiRequest("Trade", params, key)?.let {
             val ret = ((it as Map<*, *>)["return"] as Map<*, *>)
 
             logger.info("thread id: ${Thread.currentThread().id} trade ok: received: ${ret["received"]} " +
@@ -176,7 +186,7 @@ class WEX(kodein: Kodein): RestStock(kodein, name) {
         val data = mapOf("amount" to transfer.amount.toPlainString(), "coinName" to transfer.cur.toUpperCase(),
             "address" to transfer.address.first)
 
-        return apiRequest("WithdrawCoin", withdrawKey, data)?.let {
+        return apiRequest("WithdrawCoin", data, withdrawKey)?.let {
             Pair(TransferStatus.PENDING, ((it as Map<*, *>)["return"] as Map<*, *>)["tId"].toString())
         } ?: Pair(TransferStatus.FAILED, "")
     }

@@ -25,29 +25,44 @@ class Kraken(kodein: Kodein) : RestStock(kodein, name) {
     private fun publicApi(cmd: String) = "https://api.kraken.com/0/public/$cmd"
     private fun privateApi(cmd: String) = Pair("https://api.kraken.com/0/private/$cmd", "/0/private/$cmd")
 
-    override suspend fun apiRequest(cmd: String, key: StockKey, data: Map<String, Any>?, timeOut: Long): Map<*, *>? {
+    suspend fun apiRequest(cmd: String, data: Map<String, Any>? = null, key: StockKey? = infoKey, timeOut: Long = 2000) = key?.let {
         val (url, urlParam) = privateApi(cmd)
         val nonce = "${++key.nonce}"
 
         val params = mutableMapOf<String, Any>("nonce" to nonce).apply { data?.let { putAll(data) } }
 
-        val payload = params.entries.joinToString("&") { "${URLEncoder.encode(it.key, "UTF-8")}=${URLEncoder.encode(it.value.toString(), "UTF-8")}" }
+        val payload = params.entries.joinToString("&") {
+            "${URLEncoder.encode(
+                it.key,
+                "UTF-8"
+            )}=${URLEncoder.encode(it.value.toString(), "UTF-8")}"
+        }
 
-        val hmacMessage = urlParam.toByteArray() + MessageDigest.getInstance("SHA-256").run { digest((nonce + payload).toByteArray()) }
+        val hmacMessage =
+            urlParam.toByteArray() + MessageDigest.getInstance("SHA-256").run { digest((nonce + payload).toByteArray()) }
 
-        val mac = Mac.getInstance("HmacSHA512").apply { init(SecretKeySpec(Base64.getDecoder().decode(key.secret), "HmacSHA512")) }
+        val mac = Mac.getInstance("HmacSHA512")
+            .apply { init(SecretKeySpec(Base64.getDecoder().decode(key.secret), "HmacSHA512")) }
         val sign = Base64.getEncoder().encodeToString(mac.doFinal(hmacMessage))
 
-        return parseJsonResponse(http.post(logger, url, mapOf("API-Key" to key.key, "API-Sign" to sign), payload, timeOut)) as Map<*, *>?
+        parseJsonResponse(
+            http.post(
+                logger,
+                url,
+                mapOf("API-Key" to key.key, "API-Sign" to sign),
+                payload,
+                timeOut
+            )
+        ) as Map<*, *>?
     }
 
-    override suspend fun balance(key: StockKey): Map<String, BigDecimal>? = apiRequest("Balance", key)?.let { res ->
+    override suspend fun balance(): Map<String, BigDecimal>? = apiRequest("Balance")?.let { res ->
         (res["result"] as Map<*, *>).map { rutWalletSymbol(it.key.toString()) to BigDecimal(it.value.toString()) }
             .filter { currencies.containsKey(it.first) }.toMap()
     }
 
     override suspend fun cancelOrders(orders: List<Order>) = parallelOrders(orders) { order, key ->
-        apiRequest("CancelOrder", key, mapOf("txid" to order.stockOrderId))?.let { res ->
+        apiRequest("CancelOrder", mapOf("txid" to order.stockOrderId), key)?.let { res ->
             if ((((res["result"] as Map<*, *>)["count"]) as Long) == 1L) {
                 OrderUpdate(order.id, order.stockOrderId, order.amount, OrderStatus.CANCELED)
             } else {
@@ -60,11 +75,11 @@ class Kraken(kodein: Kodein) : RestStock(kodein, name) {
         } ?: logger.error("CancelOrder failed.").run { OrderUpdate(order.id, order.stockOrderId, order.amount, OrderStatus.CANCEL_FAILED) }
     }
 
-    override suspend fun deposit(lastId: Long, transfers: List<Transfer>, key: StockKey): Pair<Long, List<TransferUpdate>> {
+    override suspend fun deposit(lastId: Long, transfers: List<Transfer>): Pair<Long, List<TransferUpdate>> {
         val tu = transfers.map { transfer ->
             logger.info("txId(${transfer.tId}) status ${transfer.status}")
             var status = transfer.status
-            apiRequest("DepositStatus", key, mapOf("asset" to getStockSymbol(transfer.cur)), 10000)?.let { res ->
+            apiRequest("DepositStatus", mapOf("asset" to getStockSymbol(transfer.cur)), timeOut = 10000)?.let { res ->
                 (res["result"] as List<*>).find { (it as Map<*, *>)["txid"].toString() == transfer.tId }.let { (it as Map<*, *>) }.let {
                     logger.info("txId(${it["txid"]}) found status ${it["status"]}")
                     status = when (it["status"].toString()) {
@@ -99,12 +114,12 @@ class Kraken(kodein: Kodein) : RestStock(kodein, name) {
     override fun handleError(res: Any) = (res as JSONObject)
         .takeIf { (it["error"] as JSONArray).isEmpty() } ?: throw Exception(res["error"].toString())
 
-    override suspend fun pairInfo(key: StockKey): Map<String, TradeFee>? {
+    override suspend fun pairInfo(): Map<String, TradeFee>? {
         val html = Jsoup.connect(infoUrl("205893708-What-is-the-minimum-order-size")).userAgent(userAgent).get()
         val list = html.select("table").select("tr").drop(1).map { it.select("td")[1].text() }
         val minAmount = list.map { t -> t.split(" ").let { Pair(rutSymbol(it[1], false), BigDecimal(it[0])) } }.toMap()
 
-        return apiRequest("TradeVolume", key, mapOf("pair" to pairs.keys.joinToString { stockPair(it) }))?.let { info ->
+        return apiRequest("TradeVolume", mapOf("pair" to pairs.keys.joinToString { stockPair(it) }))?.let { info ->
             (info["result"] as Map<*, *>).let { res ->
                 (res["fees"] as Map<*, *>).map { (stockPair, p) ->
                     val pair = rutPair(stockPair as String)
@@ -117,7 +132,7 @@ class Kraken(kodein: Kodein) : RestStock(kodein, name) {
         }
     }
 
-    override suspend fun currencyInfo(key: StockKey): Map<String, CrossFee>? {
+    override suspend fun currencyInfo(): Map<String, CrossFee>? {
         val html = Jsoup.connect(infoUrl("201893608-Digital-assets-cryptocurrency-withdrawal-fees")).userAgent(userAgent).get()
         val list = html.select("table").select("tr").drop(1).map { row -> row.select("td").let { it[1].text() to  it[2].text() } }.toMap()
         return list.map {
@@ -152,7 +167,7 @@ class Kraken(kodein: Kodein) : RestStock(kodein, name) {
      * expired = order expired
      */
     override suspend fun orderInfo(order: Order, updateTotal: Boolean): OrderUpdate? {
-        return apiRequest("QueryOrders", activeKey, mapOf("txid" to order.stockOrderId))?.let {
+        return apiRequest("QueryOrders", mapOf("txid" to order.stockOrderId), activeKey)?.let {
             val res = (it["result"] as Map<*, *>).values.first() as Map<*, *>
             val remaining = BigDecimal(res["vol"].toString()) - BigDecimal(res["vol_exec"].toString())
             val status = if (res["status"].toString() == "open" || res["status"].toString() == "pending") {
@@ -175,7 +190,7 @@ class Kraken(kodein: Kodein) : RestStock(kodein, name) {
             "price" to order.rate.toString(), "volume" to order.amount.toString(), "userref" to order.id.toString())
         logger.info("send tp play ${params.entries.joinToString { "${it.key}:${it.value}" }}")
 
-        apiRequest("AddOrder", key, params)?.let {
+        apiRequest("AddOrder", params, key)?.let {
             val ret = (it["result"] as Map<*, *>)
             val txId: String = (ret["txid"] as JSONArray).first() as String
             val orderDescription = (ret["descr"] as Map<*, *>)
@@ -206,7 +221,7 @@ class Kraken(kodein: Kodein) : RestStock(kodein, name) {
         val data = mapOf("amount" to transfer.amount.toPlainString(), "asset" to getStockSymbol(transfer.cur),
             "key" to transfer.address.first)
 
-        return apiRequest("Withdraw", withdrawKey, data)?.let {
+        return apiRequest("Withdraw", data, withdrawKey)?.let {
             Pair(TransferStatus.PENDING, (it["result"] as Map<*, *>)["refid"] as String)
         } ?: Pair(TransferStatus.FAILED, "")
     }

@@ -53,7 +53,7 @@ enum class C {
 object RutData {
     fun getStocks(): Map<String, Int> {
         return mapOf(
-            WEX.name to 1,
+//            WEX.name to 1,
 //                CEX.name to 2,
 //                Poloniex.name to 3,
             Kraken.name to 4,

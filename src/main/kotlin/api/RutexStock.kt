@@ -1,6 +1,7 @@
 package api
 
 import data.*
+import data.UpdateWallet
 import database.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -17,10 +18,11 @@ import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
-abstract class RutexStock(final override val kodein: Kodein, final override val name: String) : IStock, KodeinAware,
-    KLoggable {
+abstract class RutexStock(final override val kodein: Kodein, final override val name: String) : IStock, KodeinAware, KLoggable {
     val db: IDb by instance()
     val runningStocks: Set<String> by kodein.instance("stocks")
+
+    val rut: IRut by instance()
 
     override val logger = this.logger(name)
 
@@ -52,19 +54,18 @@ abstract class RutexStock(final override val kodein: Kodein, final override val 
 
     override val wallet = mutableMapOf<String, BigDecimal>()
 
-    fun getKeys(type: KeyType) = keys.filter { it.type == type }.takeIf { it.isNotEmpty() }!!
+    fun getKeys(type: KeyType) = keys.filter { it.type == type }.takeIf { it.isNotEmpty() }
 
-    val walletKey: StockKey by lazy { getKeys(KeyType.WALLET).first() }
-    val activeKey: StockKey by lazy { getKeys(KeyType.ACTIVE).first() }
-    val withdrawKey: StockKey by lazy { getKeys(KeyType.WITHDRAW).first() }
-    val infoKey: StockKey by lazy { getKeys(KeyType.HISTORY).first() }
+    val activeKey: StockKey? by lazy { getKeys(KeyType.ACTIVE)?.first() }
+    val infoKey: StockKey? by lazy { getKeys(KeyType.HISTORY)?.first() }
+    val withdrawKey: StockKey? by lazy { getKeys(KeyType.WITHDRAW)?.first() }
 
-    abstract suspend fun apiRequest(cmd: String, key: StockKey, data: Map<String, Any>? = null, timeOut: Long = 2000): Any?
-    abstract suspend fun balance(key: StockKey = infoKey): Map<String, BigDecimal>?
-    abstract suspend fun pairInfo(key: StockKey = infoKey): Map<String, TradeFee>?
-    abstract suspend fun currencyInfo(key: StockKey = infoKey): Map<String, CrossFee>?
+//    abstract suspend fun apiRequest(cmd: String, key: StockKey, data: Map<String, Any>? = null, timeOut: Long = 2000): Any?
+    abstract suspend fun balance(): Map<String, BigDecimal>?
+    abstract suspend fun pairInfo(): Map<String, TradeFee>?
+    abstract suspend fun currencyInfo(): Map<String, CrossFee>?
     abstract suspend fun orderInfo(order: Order, updateTotal: Boolean = true): OrderUpdate?
-    abstract suspend fun deposit(lastId: Long, transfers: List<Transfer>, key: StockKey = infoKey): Pair<Long, List<TransferUpdate>>
+    abstract suspend fun deposit(lastId: Long, transfers: List<Transfer>): Pair<Long, List<TransferUpdate>>
     abstract fun handleError(res: Any): Any?
 
     private val transferActor = GlobalScope.actor<TransferMsg>(capacity = Channel.UNLIMITED) {
@@ -92,7 +93,11 @@ abstract class RutexStock(final override val kodein: Kodein, final override val 
         transferActor.offer(TransferList(db.getTransfer(name).let { cur?.run { it.filter { it.cur == cur } } ?: it }, done))
 
     fun updateActive(update: OrderUpdate, decLock: Boolean) {
-        RutEx.controlChannel.offer(ActiveUpdate(name, update, decLock))
+        rut.controlChannel.offer(ActiveUpdate(name, update, decLock))
+    }
+
+    fun updateWallet(update: UpdateWallet) {
+        rut.controlChannel.offer(update)
     }
 
     fun infoPolling(block: suspend () -> Unit = EMPTY_LAMBDA) = GlobalScope.launch(handler) {
@@ -127,7 +132,7 @@ abstract class RutexStock(final override val kodein: Kodein, final override val 
                     lastPair[pair]?.let { p != it.fee } ?: logger.error("$pair not exists in rutBot").run { false }
                 }.takeIf { it.isNotEmpty() }?.let {
                     it.onEach { lastPair[it.key]!!.fee = it.value }
-                    UpdateTradeFee(name, it).also { RutEx.controlChannel.send(it) }.done.join()
+                    UpdateTradeFee(name, it).also { rut.controlChannel.send(it) }.done.join()
                 }
             }
         } while (takeIf { forceUpdate }?.run { res == null } == true)
@@ -144,7 +149,7 @@ abstract class RutexStock(final override val kodein: Kodein, final override val 
                 }.takeIf { it.isNotEmpty() }?.let {
                     it.onEach { lastCur[it.key]!!.fee = it.value }
                     UpdateCrossFee(name, if (forceUpdate) lastCur.map { it.key to it.value.fee }.toMap() else it)
-                        .also { RutEx.controlChannel.send(it) }.done.join()
+                        .also { rut.controlChannel.send(it) }.done.join()
                 }
             }
         } while (takeIf { forceUpdate }?.run { res == null } == true)
@@ -165,7 +170,7 @@ abstract class RutexStock(final override val kodein: Kodein, final override val 
         }
     }
 
-    override suspend fun getActiveOrders() = GetActiveList(name).also { RutEx.controlChannel.offer(it) }.list.await()
+    override suspend fun getActiveOrders() = GetActiveList(name).also { rut.controlChannel.offer(it) }.list.await()
 
     private fun bookError() {
         internalBook.reset()
@@ -251,7 +256,7 @@ abstract class RutexStock(final override val kodein: Kodein, final override val 
                 if (tu.status != ts.status) {
                     if (ts.status == TransferStatus.SUCCESS) {
 //                        onWalletUpdate(plus = Pair(ts.cur, ts.amount))
-                        RutEx.controlChannel.send(UpdateWallet(name, plus = Pair(ts.cur, ts.amount)))
+                        rut.controlChannel.send(UpdateWallet(name, plus = Pair(ts.cur, ts.amount)))
                     }
                     db.saveTransfer(ts)
                 }

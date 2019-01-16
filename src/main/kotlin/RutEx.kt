@@ -1,3 +1,4 @@
+import api.IRut
 import state.LocalState
 import ch.qos.logback.classic.util.ContextInitializer
 import com.zaxxer.hikari.HikariConfig
@@ -17,64 +18,38 @@ import org.kodein.di.Kodein
 import api.IStock
 import bot.IWebSocket
 import bot.OKWebSocket
+import bot.RutHttp
 import data.GetRates
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.apache.Apache
+import kotlinx.serialization.ImplicitReflectionSerializer
+import kotlinx.serialization.parse
 import org.kodein.di.generic.*
+import utils.IHttp
 import web.RutexWeb
 import java.io.File
 import java.io.FileInputStream
 import java.util.*
 import javax.sql.DataSource
+import kotlin.collections.HashSet
 import kotlin.reflect.full.primaryConstructor
 
-enum class Parameters { port, testKeys }
-
-object RutEx: KLoggable {
-    init { System.setProperty(ContextInitializer.CONFIG_FILE_PROPERTY, "logback.xml") }
-    val hikariCfg = Properties().apply { load(FileInputStream("hikari.properties")) }
-
+class RutEx(val kodein: Kodein): IRut, KLoggable {
     override val logger = logger()
 
-    val stateLock = Mutex()
-    var stockList = mutableMapOf<String, IStock>()
+    override var stockList = mutableMapOf<String, IStock>()
 
     lateinit var localState: LocalState
 
     lateinit var mainHandler: Job
     val handler = CoroutineExceptionHandler { _, e -> logger.error(e.message, e) }
-    val controlChannel = Channel<ControlMsg>(capacity = Channel.UNLIMITED)
+    override val controlChannel = Channel<ControlMsg>(capacity = Channel.UNLIMITED)
 
-    val kodein = Kodein {
-        bind<DataSource>() with singleton { HikariDataSource(HikariConfig(hikariCfg)) }
-        constant(Parameters.testKeys) with (File("Rutex.keys").takeIf { it.exists() }?.readText()
-            ?.let { JSON.unquoted.parse(RutKeys.serializer(), it) } ?: RutData.getTestKeys())
-        constant(Parameters.port) with 9009
+    override suspend fun getState() = GetRates().also { controlChannel.send(it) }.data.await()
 
-                bind<IDb>() with singleton { Db(kodein) }
-        bind<HttpClient>() with singleton { HttpClient(Apache) }
-        bind<IWebSocket>() with provider { OKWebSocket() }
-    }
-
-    @JvmStatic
-    suspend fun main(args: Array<String>) {
-        try {
-            Runtime.getRuntime().addShutdownHook(Thread { runBlocking { RutEx.stop() } })
-
-            logger.info { "start ${logger.name}" }
-
-            RutexWeb(kodein).start(true)
-            start()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    suspend fun getState() = GetRates().also { controlChannel.send(it) }.data.await()
-
-    private suspend fun start() {
+    override suspend fun start() {
         RutData.getStocks().keys.associateTo(stockList) {
-            it to Class.forName("api.$it").kotlin.primaryConstructor?.call(kodein) as IStock
+            it to Class.forName("api.stocks.$it").kotlin.primaryConstructor?.call(kodein) as IStock
         }.toMap()
 
         localState = LocalState(stockList, logger, kodein)
@@ -82,7 +57,7 @@ object RutEx: KLoggable {
         stockList.map { GlobalScope.launch { it.value.start() } }.onEach { it.join() }
     }
 
-    private suspend fun stop() {
+    override suspend fun stop() {
         logger.info("stopping")
         stockList.map { GlobalScope.launch { it.value.stop() } }.onEach { it.join() }
         mainHandler.cancelAndJoin()

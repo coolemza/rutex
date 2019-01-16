@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 abstract class RestStock(kodein: Kodein, name: String) : RutexStock(kodein, name) {
     private val tradeLock = Mutex()
-    private val tradeKeys: List<StockKey> by lazy { getKeys(KeyType.TRADE).takeIf { it.isNotEmpty() }!! }
+    private val tradeKeys: List<StockKey>? by lazy { getKeys(KeyType.TRADE) }
 
     abstract suspend fun depth(updateTo: DepthBook?, pair: String?): Boolean
 
@@ -150,11 +150,11 @@ abstract class RestStock(kodein: Kodein, name: String) : RutexStock(kodein, name
     }
 
     private suspend fun getTradeKeys(orders: List<Order>) = tradeLock.withLock { //FIXME: remove lock
-        tradeKeys.filter { !it.busy }.takeIf { it.size >= orders.size }?.let { key ->
+        tradeKeys?.filter { !it.busy }?.takeIf { it.size >= orders.size }?.let { key ->
             orders.mapIndexed { i, order -> order to key[i] }.onEach { it.second.busy = true }
         } ?: orders.forEach {
             updateActive(OrderUpdate(it.id, it.stockOrderId, BigDecimal.ZERO, OrderStatus.FAILED), true)
-        }.also { logger.error("not enough threads for Trading!!!") }.let { null }
+        }.also { logger.error("not enough keys for Trading!!!") }.let { null }
     }
 
     private suspend fun releaseTradeKey(key: StockKey) = tradeLock.withLock { key.busy = false }

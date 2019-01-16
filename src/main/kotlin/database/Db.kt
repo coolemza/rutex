@@ -46,9 +46,10 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
             }
         }
 
-        kodein.direct.instance<RutKeys>(Parameters.testKeys).keys.forEach {
-            val stockId = stocks[it.key]!!
-            it.value.forEach { initKey(stockId, it.key, it.secret, it.type) }
+        kodein.direct.instance<RutKeys>(Parameters.testKeys).keys.let { keys ->
+            stocks.forEach { stock, stockId ->
+                keys[stock]?.forEach { initKey(stockId, it.key, it.secret, it.type) }
+            }
         }
     }
 
@@ -242,7 +243,7 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
         Stocks.select { Stocks.name.eq(stock) }.let { s ->
             if (s.asIterable().toList().isEmpty()) {
                 Stocks.insert {
-                    it[Stocks.id] = id
+//                    it[Stocks.id] = id
                     it[Stocks.name] = stock
                     it[history_last_id] = 0
                 }[Stocks.id]!!
@@ -279,29 +280,36 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
 
     private fun initStockCurrency(stockId: Int, curId: Int, withdrawMin: BigDecimal, withdrawPercent: BigDecimal,
                                   depositMin: BigDecimal, depositPercent: BigDecimal, address: String, tag: String) = transaction {
-        Stock_Currency.insertIgnore {
-            it[stock_id] = stockId
-            it[currency_id] = curId
-            it[enabled] = true
-            it[withdraw_min] = withdrawMin
-            it[withdraw_percent] = withdrawPercent
-            it[deposit_min] = depositMin
-            it[deposit_percent] = depositPercent
-            it[Stock_Currency.address] = address
-            it[Stock_Currency.tag] = tag
-        }
-    }
-
-    private fun initStockPair(stockId: Int, pairId: Int, percent: BigDecimal, minAmount: BigDecimal) {
-        transaction {
-            Stock_Pair.insertIgnore {
-                it[stock_id] = stockId
-                it[pair_id] = pairId
-                it[enabled] = true
-                it[Stock_Pair.makerFee] = percent
-                it[Stock_Pair.takerFee] = percent
-                it[Stock_Pair.minAmount] = minAmount
+        Stock_Currency.select { Stock_Currency.stock_id.eq(stockId) and Stock_Currency.currency_id.eq(curId) }.let { sc ->
+            if (sc.asIterable().toList().isEmpty()) {
+                Stock_Currency.insert {
+                    it[stock_id] = stockId
+                    it[currency_id] = curId
+                    it[enabled] = true
+                    it[withdraw_min] = withdrawMin
+                    it[withdraw_percent] = withdrawPercent
+                    it[deposit_min] = depositMin
+                    it[deposit_percent] = depositPercent
+                    it[Stock_Currency.address] = address
+                    it[Stock_Currency.tag] = tag
+                }
             }
         }
     }
+
+    private fun initStockPair(stockId: Int, pairId: Int, percent: BigDecimal, minAmount: BigDecimal) = transaction {
+        Stock_Pair.select { Stock_Pair.stock_id.eq(stockId) and Stock_Pair.pair_id.eq(pairId) }.let { sp ->
+            if (sp.asIterable().toList().isEmpty()) {
+                Stock_Pair.insert {
+                    it[stock_id] = stockId
+                    it[pair_id] = pairId
+                    it[enabled] = true
+                    it[Stock_Pair.makerFee] = percent
+                    it[Stock_Pair.takerFee] = percent
+                    it[Stock_Pair.minAmount] = minAmount
+                }
+            }
+        }
+    }
+
 }

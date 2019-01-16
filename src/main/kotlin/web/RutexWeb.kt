@@ -1,5 +1,6 @@
 package web
 
+import api.IRut
 import com.google.gson.GsonBuilder
 import data.UpdateFullWallet
 import data.UpdateLimits
@@ -18,15 +19,17 @@ import io.ktor.routing.routing
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.util.error
+import kodein
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JSON
 import org.kodein.di.Kodein
 import org.kodein.di.KodeinAware
+import org.kodein.di.direct
 import org.kodein.di.generic.instance
-import java.math.BigDecimal
 import java.time.LocalDateTime
 
 val gson = GsonBuilder().setPrettyPrinting().serializeNulls().create()
+val rut: IRut by kodein.instance()
 
 @Serializable
 data class GlobalDepthBook(val time: String, val data: Map<String, Map<String, Map<String, List<Map<String, String>>>>>)
@@ -52,7 +55,7 @@ fun Application.module() {
 
     routing {
         get("/rates") {
-            val state = RutEx.getState()
+            val state = rut.getState()
             call.respond(JSON.unquoted.stringify(GlobalDepthBook.serializer(), GlobalDepthBook(LocalDateTime.now().toString(), state)))
         }
     }
@@ -60,6 +63,7 @@ fun Application.module() {
 
 class RutexWeb(override val kodein: Kodein) : KodeinAware {
     val port: Int by instance(Parameters.port)
+
     fun start(wait: Boolean = false) {
         embeddedServer(factory = Netty, port = port, module = Application::module).start(wait)
     }

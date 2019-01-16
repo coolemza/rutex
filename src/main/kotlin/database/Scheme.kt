@@ -16,7 +16,7 @@ object Api_Keys: Table() {
     val apikey = varchar("apikey", 256)
     val secret = varchar("secret", 256)
     val nonce = long("nonce")
-    val type = enumeration("type", KeyType::class.java)
+    val type = enumeration("type", KeyType::class)
 }
 
 object Currencies: Table() {
