@@ -25,30 +25,29 @@ class WEX(kodein: Kodein): RestStock(kodein, name) {
 
     private val privateApi = "$site/tapi/"
 
-    suspend fun apiRequest(cmd: String, data: Map<String, Any>? = null, key: StockKey? = infoKey, timeOut: Long = 2000): Any? {
-        key?.let {
-            logger.trace("in key - $key")
-            val params = mutableMapOf<String, Any>(
-                "method" to cmd,
-                "nonce" to "${++key.nonce}"
-            ).apply { data?.let { putAll(it) } }
+    suspend fun apiRequest(cmd: String, data: Map<String, Any>? = null, key: StockKey? = infoKey, timeOut: Long = 2000) = key?.let {
+        logger.trace("in key - $key")
+        val params = mutableMapOf<String, Any>(
+            "method" to cmd,
+            "nonce" to "${++key.nonce}"
+        ).apply { data?.let { putAll(it) } }
 //        data?.let { (it as Map<*, *>).forEach { params[it.key as String] = "${it.value}" } }
 
-            val postData = params.entries.joinToString("&") {
-                "${URLEncoder.encode(
-                    it.key,
-                    "UTF-8"
-                )}=${URLEncoder.encode(it.value.toString(), "UTF-8")}"
-            }
-
-            val mac = Mac.getInstance("HmacSHA512")
-            mac.init(SecretKeySpec(key.secret.toByteArray(), "HmacSHA512"))
-            val sign = Hex.encodeHexString(mac.doFinal(postData.toByteArray(charset("UTF-8"))))
-
-            logger.trace("out key - $key")
-
-            return parseJsonResponse(http.post(logger, privateApi, mapOf("Key" to key.key, "Sign" to sign), postData))
+        val postData = params.entries.joinToString("&") {
+            "${URLEncoder.encode(
+                it.key,
+                "UTF-8"
+            )}=${URLEncoder.encode(it.value.toString(), "UTF-8")}"
         }
+
+        val mac = Mac.getInstance("HmacSHA512")
+        mac.init(SecretKeySpec(key.secret.toByteArray(), "HmacSHA512"))
+        val sign = Hex.encodeHexString(mac.doFinal(postData.toByteArray(charset("UTF-8"))))
+
+        logger.trace("out key - $key")
+
+        parseJsonResponse(http.post(logger, privateApi, mapOf("Key" to key.key, "Sign" to sign), postData))
+
     }
 
     override suspend fun balance(): Map<String, BigDecimal>? = apiRequest("getInfo")?.let { res ->

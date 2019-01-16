@@ -18,7 +18,7 @@ import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
-abstract class RutexStock(final override val kodein: Kodein, final override val name: String) : IStock, KodeinAware, KLoggable {
+abstract class Stock(final override val kodein: Kodein, final override val name: String) : IStock, KodeinAware, KLoggable {
     val db: IDb by instance()
     val runningStocks: Set<String> by kodein.instance("stocks")
 
@@ -265,5 +265,7 @@ abstract class RutexStock(final override val kodein: Kodein, final override val 
         data.done?.complete(true)
     }
 
-    fun syncWallet() { }
+    suspend fun syncWallet() {
+        updateWallet(UpdateWallet(name, update = balance()))
+    }
 }

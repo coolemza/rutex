@@ -4,10 +4,7 @@ import bot.OKWebSocket
 import bot.RutHttp
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import database.Db
-import database.IDb
-import database.RutData
-import database.RutKeys
+import database.*
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.apache.Apache
 import kotlinx.coroutines.runBlocking
@@ -26,7 +23,7 @@ enum class Parameters { port, testKeys }
 val hikariCfg = Properties().apply { load(FileInputStream("hikari.properties")) }
 val kodein = Kodein {
     bind<DataSource>() with singleton { HikariDataSource(HikariConfig(hikariCfg)) }
-    constant(Parameters.testKeys) with (File("Rutex.keys").takeIf { it.exists() }?.readText()
+    constant(Parameters.testKeys) with (File("keys.json").takeIf { it.exists() }?.readText()
         ?.let { JSON.unquoted.parse(RutKeys.serializer(), it) } ?: RutData.getTestKeys())
     constant(Parameters.port) with 9009
 
@@ -39,11 +36,9 @@ val kodein = Kodein {
 }
 
 suspend fun main(args: Array<String>) {
-//    System.setProperty(ContextInitializer.CONFIG_FILE_PROPERTY, "logback.xml")
+    val rut: IRut by kodein.instance()
 
-    val rutEx: IRut by kodein.instance()
-
-    Runtime.getRuntime().addShutdownHook(Thread { runBlocking { rutEx.stop() } })
+    Runtime.getRuntime().addShutdownHook(Thread { runBlocking { rut.stop() } })
     RutexWeb(kodein).start()
-    rutEx.start()
+    rut.start(RutData.getStocks().keys)
 }

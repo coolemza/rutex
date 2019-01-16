@@ -76,31 +76,25 @@ class Bitfinex(kodein: Kodein): WebSocketStock(kodein, name) {
             .filter { currencies.containsKey(it.first) }.toMap()
     }
 
-    suspend fun apiRequest(cmd: String, data: Map<String, Any>? = null, key: StockKey? = infoKey, timeOut: Long = 2000): Any? {
-        key?.let {
-            val params = JSONObject(mutableMapOf("request" to privateApi(cmd).second, "nonce" to "${++key.nonce}"))
-            if (null != data) {
-                when (data) {
-                    is JSONArray -> params["orders"] = data
-                    else -> params.putAll(data)
-                }
+    suspend fun apiRequest(cmd: String, data: Map<String, Any>? = null, key: StockKey? = infoKey, timeOut: Long = 2000) = key?.let {
+        val params = JSONObject(mutableMapOf("request" to privateApi(cmd).second, "nonce" to "${++key.nonce}"))
+        if (null != data) {
+            when (data) {
+                is JSONArray -> params["orders"] = data
+                else -> params.putAll(data)
             }
-
-            val payload = Base64.getEncoder().encodeToString(params.toJSONString().toByteArray())
-
-            val mac = Mac.getInstance("HmacSHA384")
-            mac.init(SecretKeySpec(key.secret.toByteArray(), "HmacSHA384"))
-            val sign = String.format("%096x", BigInteger(1, mac.doFinal(payload.toByteArray()))).toLowerCase()
-
-            return parseJsonResponse(
-                http.post(
-                    logger,
-                    privateApi(cmd).first,
-                    mapOf("X-BFX-APIKEY" to key.key, "X-BFX-PAYLOAD" to payload, "X-BFX-SIGNATURE" to sign),
-                    payload
-                )
-            )
         }
+
+        val payload = Base64.getEncoder().encodeToString(params.toJSONString().toByteArray())
+
+        val mac = Mac.getInstance("HmacSHA384")
+        mac.init(SecretKeySpec(key.secret.toByteArray(), "HmacSHA384"))
+        val sign = String.format("%096x", BigInteger(1, mac.doFinal(payload.toByteArray()))).toLowerCase()
+
+        parseJsonResponse(
+            http.post(logger, privateApi(cmd).first,
+                mapOf("X-BFX-APIKEY" to key.key, "X-BFX-PAYLOAD" to payload, "X-BFX-SIGNATURE" to sign), payload)
+        )
     }
 
     override suspend fun currencyInfo() = apiRequest("account_fees")?.let { res ->

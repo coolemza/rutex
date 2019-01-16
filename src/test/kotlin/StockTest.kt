@@ -1,5 +1,5 @@
 import api.IRut
-import api.RutexStock
+import api.Stock
 
 import data.LoadOrder
 import data.GetRates
@@ -13,26 +13,26 @@ import org.junit.Assume
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.TestInstance
 import org.kodein.di.Kodein
-import api.Transfer
-import org.junit.jupiter.api.Assumptions
 import org.kodein.di.generic.instance
 import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
-import kotlin.reflect.full.primaryConstructor
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 open class StockTest(name: String, kodein: Kodein) {
     val rut: IRut by kodein.instance()
 
-    val stock: RutexStock = Class.forName("api.stocks.$name").kotlin.primaryConstructor?.call(kodein) as RutexStock
+//    val stock: Stock = Class.forName("api.stocks.$name").kotlin.primaryConstructor?.call(kodein) as Stock
 
     init {
-        rut.stockList[name] = stock
-        runBlocking { stock.start() }
+        runBlocking { rut.start(setOf(name)) }
     }
 
-    protected suspend fun getRates() = withTimeoutOrNull(TimeUnit.SECONDS.toMillis(200)) {
+    val stock = rut.stockList[name]!! as Stock
+
+    protected suspend fun getRates() = withTimeoutOrNull(TimeUnit.SECONDS.toMillis(30)) {
         while (isActive) {
+            val cc = GetRates().also { rut.controlChannel.send(it) }.data.await()
+
             GetRates().also { rut.controlChannel.send(it) }.data.await()
                 .takeIf { stock.pairs.size == it[stock.name]?.size }
                 ?.let { return@withTimeoutOrNull it[stock.name] }
@@ -88,6 +88,8 @@ open class StockTest(name: String, kodein: Kodein) {
     }
 
     fun testOrderLiveCycle(pair: String, type: OperationType) = runBlocking {
+        Assume.assumeNotNull(stock.infoKey)
+        Assume.assumeNotNull(stock.activeKey)
         val order = Order(stock.name, type, pair, BigDecimal.ZERO, BigDecimal.ZERO)
         val state = getRates()!!.also { getWallet() }
         val rate0 = BigDecimal(state[pair]!![order.book.name]!![0]["rate"])

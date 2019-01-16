@@ -9,6 +9,8 @@ import io.ktor.application.call
 import io.ktor.application.install
 import io.ktor.features.*
 import io.ktor.gson.GsonConverter
+import io.ktor.html.respondHtml
+import io.ktor.html.respondHtmlTemplate
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.request.receive
@@ -20,6 +22,8 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.util.error
 import kodein
+import kotlinx.html.body
+import kotlinx.html.head
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JSON
 import org.kodein.di.Kodein
@@ -54,10 +58,14 @@ fun Application.module() {
     }
 
     routing {
-        get("/rates") {
-            val state = rut.getState()
-            call.respond(JSON.unquoted.stringify(GlobalDepthBook.serializer(), GlobalDepthBook(LocalDateTime.now().toString(), state)))
+        get("/") {
+            call.respondHtml {
+                head { links() }
+                body { MenuBar(this::class.simpleName) }
+            }
         }
+        rates()
+        wallets()
     }
 }
 

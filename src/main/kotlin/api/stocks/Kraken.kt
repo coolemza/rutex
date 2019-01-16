@@ -46,13 +46,7 @@ class Kraken(kodein: Kodein) : RestStock(kodein, name) {
         val sign = Base64.getEncoder().encodeToString(mac.doFinal(hmacMessage))
 
         parseJsonResponse(
-            http.post(
-                logger,
-                url,
-                mapOf("API-Key" to key.key, "API-Sign" to sign),
-                payload,
-                timeOut
-            )
+            http.post(logger, url, mapOf("API-Key" to key.key, "API-Sign" to sign), payload, timeOut)
         ) as Map<*, *>?
     }
 

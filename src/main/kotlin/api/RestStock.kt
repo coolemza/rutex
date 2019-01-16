@@ -13,7 +13,7 @@ import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
-abstract class RestStock(kodein: Kodein, name: String) : RutexStock(kodein, name) {
+abstract class RestStock(kodein: Kodein, name: String) : Stock(kodein, name) {
     private val tradeLock = Mutex()
     private val tradeKeys: List<StockKey>? by lazy { getKeys(KeyType.TRADE) }
 
