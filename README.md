@@ -1,4 +1,4 @@
-# rutex
+# rutex 
 Kotlin cryptocurrency exchange interface
 * supports Bitfinex, Kraken, ~~WEX~~
 * supports Depth, Trade fee, Withdraw fee monitoring
@@ -19,4 +19,4 @@ then
 ```gradle
 gradlew run
 ```
-open localhost:9009 to watch implenmeted stocks info
+open localhost:9009 to watch implemented stocks info

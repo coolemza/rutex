@@ -96,9 +96,7 @@ abstract class Stock(final override val kodein: Kodein, final override val name:
         rut.controlChannel.offer(ActiveUpdate(name, update, decLock))
     }
 
-    fun updateWallet(update: UpdateWallet) {
-        rut.controlChannel.offer(update)
-    }
+    fun updateWallet(update: UpdateWallet) = rut.controlChannel.offer(update)
 
     fun infoPolling(block: suspend () -> Unit = EMPTY_LAMBDA) = GlobalScope.launch(handler) {
         var feeTime = LocalDateTime.now()
