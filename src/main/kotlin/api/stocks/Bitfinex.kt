@@ -120,24 +120,6 @@ class Bitfinex(kodein: Kodein): Stock(kodein, name) {
             .filter { currencies.containsKey(it.first) }.toMap()
     }
 
-//    override suspend fun apiRequest(cmd: String, key: StockKey, data: Map<String, Any>?, timeOut: Long): Any? {
-//        val params = JSONObject(mutableMapOf("request" to privateApi(cmd).second, "nonce" to "${++key.nonce}"))
-//        if (null != data) {
-//            when (data) {
-//                is JSONArray -> params["orders"] = data
-//                else -> params.putAll(data)
-//            }
-//        }
-//
-//        val payload = Base64.getEncoder().encodeToString(params.toJSONString().toByteArray())
-//
-//        val mac = Mac.getInstance("HmacSHA384")
-//        mac.init(SecretKeySpec(key.secret.toByteArray(), "HmacSHA384"))
-//        val sign = String.format("%096x", BigInteger(1, mac.doFinal(payload.toByteArray()))).toLowerCase()
-//
-//        return parseJsonResponse(http.post(logger, privateApi(cmd).first, mapOf("X-BFX-APIKEY" to key.key, "X-BFX-PAYLOAD" to payload, "X-BFX-SIGNATURE" to sign), payload))
-//    }
-
     override suspend fun currencyInfo(key: StockKey?) = api("account_fees", key)?.let { res ->
         ((res as Map<*, *>)["withdraw"] as Map<*, *>)
             .map { it.key as String to CrossFee(withdrawFee = Fee(min = BigDecimal(it.value.toString()))) }

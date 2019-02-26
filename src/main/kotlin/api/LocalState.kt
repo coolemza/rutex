@@ -36,7 +36,8 @@ class LocalState(override val kodein: Kodein) : IState, KLoggable, KodeinAware {
 
     private val handler = CoroutineExceptionHandler { _, e -> logger.error(e.message, e) }
 
-    override lateinit var stockList: Map<String, IStock>
+    override val stockList = direct.instance<Set<String>>("stocks")
+        .associateBy({ it }) { direct.instance<IStock>(tag = StockId.valueOf(it)) }
 
     override val controlChannel = GlobalScope.actor<ControlMsg>(capacity = Channel.UNLIMITED) {
         for (msg in channel) {
@@ -106,9 +107,6 @@ class LocalState(override val kodein: Kodein) : IState, KLoggable, KodeinAware {
     }
 
     override suspend fun start(startBots: Boolean) {
-        stockList = kodein.direct.instance<Set<String>>("stocks")
-            .associateBy({ it }) { kodein.direct.instance<IStock>(tag = StockId.valueOf(it)) }
-
         logger.info("**************************************** Updating Fees ******************************************")
         coroutineScope {
             stockList.forEach {

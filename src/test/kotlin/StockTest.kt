@@ -19,14 +19,13 @@ import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-open class StockTest(val stock: Stock, kodein: Kodein) {
+open class StockTest(stockName: String, kodein: Kodein) {
     val state: IState by kodein.instance()
 
-//    val stock = state.stockList.getValue(name) as Stock
+    val stock = state.stockList.getValue(stockName) as Stock
 
     init {
-        state.stockList = mapOf(stock.name to stock)
-//        runBlocking { stock.start() }
+        runBlocking { stock.start() }
     }
 
     protected suspend fun getRates() = withTimeoutOrNull(TimeUnit.SECONDS.toMillis(30)) {
