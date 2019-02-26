@@ -20,25 +20,6 @@ import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.time.ZoneId
 
-fun getRollingLogger(name: String, logLevel: Level): Logger {
-    val ctx = LoggerFactory.getILoggerFactory() as LoggerContext
-    return ctx.getLogger(name).apply {
-        isAdditive = false
-        level = logLevel
-        addAppender(
-                RollingFileAppender<ILoggingEvent>().also {
-                    it.context = ctx
-                    it.file = "./logs/$name"
-                    it.isAppend = true
-                    it.rollingPolicy = TimeBasedRollingPolicy<ILoggingEvent>()
-                            .apply { fileNamePattern = "./logs/$name.%d{yyyy-MM-dd}"; context = ctx; maxHistory = 5; setParent(it); start() }
-                    it.encoder = PatternLayoutEncoder().apply { context = ctx; pattern = "%date{HH:mm:ss.SSS} %-5p [%t%X{threadId}] %C{0}.%M %m%n"; start() }
-                    it.start()
-                }
-        )
-    }
-}
-
 inline fun <T> Iterable<T>.sumByDecimal(selector: (T) -> BigDecimal): BigDecimal {
     var sum = BigDecimal.ZERO
     for (element in this) {

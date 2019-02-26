@@ -23,4 +23,16 @@ data class Order(var id: Long, var summarize_id: CompletableDeferred<Long>, var 
                 if (type == OperationType.sell) BookType.bids else BookType.asks,
                 pair, rate, amount, amount, amount, amount, BigDecimal.ZERO,
                 BigDecimal.ZERO, stock, OrderStatus.ACTIVE)
+
+    fun getLockCur() = pair.split("_")[if (type == OperationType.buy) 1 else 0]
+
+    fun getFromCur() = getLockCur()
+
+    fun getToCur() = pair.split("_")[if (type == OperationType.buy) 0 else 1]
+
+    fun getLockAmount(amount: BigDecimal = remaining) = (if (type == OperationType.buy) (rate * amount).setScale(8, RoundingMode.DOWN) else amount).stripTrailingZeros()
+
+    fun getPlayedAmount(amount: BigDecimal = remaining) = ((if (type == OperationType.buy) (amount * fee).setScale(8, RoundingMode.DOWN) else
+        (rate * amount * fee).setScale(8, RoundingMode.DOWN)).stripTrailingZeros())
+
 }

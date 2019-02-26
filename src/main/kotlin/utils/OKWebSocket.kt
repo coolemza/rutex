@@ -1,13 +1,11 @@
-package bot
+package utils
 
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 import mu.KLogger
 import okhttp3.*
 import java.util.concurrent.TimeUnit
 
-class OKWebSocket: WebSocketListener(), IWebSocket {
-//    override var channel = Channel<String>()
+class OKWebSocket : WebSocketListener(), IWebSocket {
 
     lateinit var socket: WebSocket
     lateinit var job: Job
@@ -18,15 +16,16 @@ class OKWebSocket: WebSocketListener(), IWebSocket {
     override var host = "OkSocketHost"
     override var path = "OkSocketPath"
 
-    lateinit var handler: suspend (String)-> Unit
+    lateinit var handler: suspend (String) -> Unit
 
     var needConnect = true
-
     var socketCount = 0L
 
-    override suspend fun ws(logger: KLogger, host: String, path: String, block: suspend (IWebSocket) -> Unit, handler: suspend (String)-> Unit) {
+    override suspend fun ws(logger: KLogger, host: String, path: String, block: suspend (IWebSocket) -> Unit,
+                            handler: suspend (String) -> Unit)
+    {
         this.handler = handler
-        job = GlobalScope.launch {
+        job = GlobalScope.launch(Dispatchers.IO) {
             this@OKWebSocket.logger = logger
             this@OKWebSocket.url = "wss://$host$path"
             val request = Request.Builder().url("wss://$host$path").build()
@@ -57,7 +56,7 @@ class OKWebSocket: WebSocketListener(), IWebSocket {
         }
     }
 
-    override suspend fun send(str: String) = socket.send(str)
+    override fun send(str: String) = socket.send(str)
 
     override fun onMessage(webSocket: WebSocket, text: String) {
         runBlocking { handler(text) }

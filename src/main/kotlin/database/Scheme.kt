@@ -1,11 +1,13 @@
 package database
 
 import org.jetbrains.exposed.sql.Table
+import java.math.BigDecimal
 
 enum class BookType { asks, bids }
 enum class KeyType { WALLET, TRADE, ACTIVE, DEBUG, HISTORY, WITHDRAW }
 enum class OrderStatus { ACTIVE, PARTIAL, COMPLETED, CANCELED, FAILED, CANCEL_FAILED }
 enum class OperationType { buy, sell }
+enum class PlayType { LIMIT, FULL }
 enum class TransferStatus { PENDING, WAITING, SUCCESS, FAILED }
 enum class WalletType { AVAILABLE, LOCKED, TOTAL }
 
@@ -17,6 +19,33 @@ object Api_Keys: Table() {
     val secret = varchar("secret", 256)
     val nonce = long("nonce")
     val type = enumeration("type", KeyType::class)
+}
+
+object Cross_Limits_Less: Table() {
+    val id = integer("id").autoIncrement().primaryKey()
+    val stock_id_from = integer("stock_id_from") references Stocks.id
+    val stock_id_to = integer("stock_id_to") references Stocks.id
+    val currency_id = integer("cur_id") references  Currencies.id
+    val limit = decimal("limit", 20, 8)
+    val progress = decimal("progress", 20, 8)
+    val limit_full = decimal("limit_full", 20, 8)
+    val progress_full = decimal("progress_full", 20, 8)
+    val stop = bool("stop").default(false)
+
+    init { uniqueIndex(stock_id_from, stock_id_to, currency_id) }
+}
+
+object Cross_Limits: Table() {
+    val id = integer("id").autoIncrement().primaryKey()
+    val stock_id_from = integer("stock_id_from") references Stocks.id
+    val stock_id_to = integer("stock_id_to") references Stocks.id
+    val currency_id = integer("cur_id") references  Currencies.id
+    val limit = decimal("limit", 20, 8)
+    val progress = decimal("progress", 20, 8)
+    val limit_full = decimal("limit_full", 20, 8)
+    val progress_full = decimal("progress_full", 20, 8)
+    val stop = bool("stop").default(false)
+    init { uniqueIndex(stock_id_from, stock_id_to, currency_id) }
 }
 
 object Currencies: Table() {
@@ -45,6 +74,7 @@ object Rates: Table() {
 object Stocks: Table() {
     val id = integer("id").autoIncrement().primaryKey()
     val name = varchar("name", 20)
+    val walletRatio = decimal("wallet_percent", 20, 8).default(BigDecimal("0.5"))
     val history_last_id = long("history_last_id")
     init { uniqueIndex(name) }
 }
@@ -73,6 +103,15 @@ object Stock_Pair: Table() {
     init { uniqueIndex(stock_id, pair_id) }
 }
 
+object TestWallet: Table() {
+    val id = integer("id").autoIncrement().primaryKey()
+    val date = datetime("date")
+    val stock_id = integer("stock_id") references Stocks.id
+    val currency_id = integer("currency_id") references Currencies.id
+    val amount = decimal("amount", 20, 8)
+    init { uniqueIndex(stock_id, currency_id) }
+}
+
 object Transfers: Table() {
     val id = integer("id").autoIncrement().primaryKey()
     val date = datetime("date")
@@ -85,7 +124,7 @@ object Transfers: Table() {
     val tag = varchar("tag", 256)
     val tId = varchar("t_id", 256)
     val withdraw_id = varchar("withdraw_id", 256)
-    var status = Wallet.enumeration("type", TransferStatus::class.java)
+    var status = Wallet.enumeration("type", TransferStatus::class.java.kotlin)
 }
 
 object Wallet: Table() {

@@ -1,19 +1,20 @@
 package web
 
-import api.IRut
+import api.IState
+import data.GetRates
 import io.ktor.application.call
 import io.ktor.html.respondHtml
 import io.ktor.routing.Route
 import io.ktor.routing.get
 import kodein
 import kotlinx.html.*
-import org.kodein.di.direct
 import org.kodein.di.generic.instance
 import utils.getLastRates
 
 fun Route.rates() {
     get("rates") {
-        val rates = getLastRates(kodein.direct.instance<IRut>().getState())
+        val state: IState by kodein.instance()
+        val rates = getLastRates(GetRates().also { state.controlChannel.send(it) }.data.await())
         val stocks = rates.entries.map { it.value.keys.first() }.toSet()
 
         call.respondHtml {
@@ -25,7 +26,7 @@ fun Route.rates() {
                         table("table table-condensed table-striped table-bordered") {
                             thead {
                                 tr { th { rowSpan = "2"; +"" }; stocks.forEach { th { colSpan = "2"; +it } } }
-                                tr { stocks.forEach { th { +"ask" }; th { +"bid" }; } }
+                                tr { repeat(stocks.size) { th { +"ask" }; th { +"bid" }; } }
                             }
                             tbody {
                                 rates.toSortedMap().forEach { pair ->

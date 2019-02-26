@@ -50,6 +50,17 @@ enum class C {
     zec
 }
 
+enum class StockId {
+    Bitfinex,
+    BTCChina,
+    Exmo,
+    Huobi,
+    Kraken,
+    OKCoin,
+    Poloniex,
+    WEX
+}
+
 object RutData {
     fun getStocks(): Map<String, Int> {
         return mapOf(

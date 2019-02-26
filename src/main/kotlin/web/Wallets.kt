@@ -1,6 +1,6 @@
 package web
 
-import api.IRut
+import api.IState
 import data.GetWallet
 import io.ktor.application.call
 import io.ktor.html.respondHtml
@@ -9,17 +9,15 @@ import io.ktor.routing.get
 import kodein
 import kotlinx.coroutines.runBlocking
 import kotlinx.html.*
-import org.kodein.di.direct
 import org.kodein.di.generic.instance
-import utils.getLastRates
 
 fun Route.wallets() {
     get("wallets") {
-        val wallets = kodein.direct.instance<IRut>().let { rut ->
-            rut.stockList.map {
-                it.key to runBlocking { GetWallet(it.key).also { rut.controlChannel.send(it) }.wallet.await() }
-            }.toMap()
-        }
+        val state: IState by kodein.instance()
+        val wallets = state.stockList.map { (stockName, _) ->
+            stockName to runBlocking { GetWallet(stockName).also { state.controlChannel.send(it) }.wallet.await() }
+        }.toMap()
+
         call.respondHtml {
             head { links() }
             body {

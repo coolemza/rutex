@@ -2,6 +2,7 @@ package data
 
 import database.BookType
 import api.Update
+import java.util.concurrent.atomic.AtomicInteger
 
 class DepthList() : MutableList<Depth> by mutableListOf() {
     var nonce: Int = 0
@@ -9,7 +10,7 @@ class DepthList() : MutableList<Depth> by mutableListOf() {
     var updated = true
     var topUpdated = true
 
-    var lockCounter = 0
+    var lockCounter = AtomicInteger()
 
     constructor(update: DepthList) : this() {
         nonce = update.nonce
@@ -87,7 +88,7 @@ class DepthType() : MutableMap<BookType, DepthList> by mutableMapOf() {
 
 class DepthBook() : MutableMap<String, DepthType> by mutableMapOf() {
     val pairCount = mutableMapOf<String, Long>()
-    var nonce: Int = 0
+    var nonce: ULong = 0u
 
     constructor(update: DepthBook) : this() {
         this.nonce = update.nonce
@@ -109,11 +110,11 @@ class DepthBook() : MutableMap<String, DepthType> by mutableMapOf() {
         forEach { it.value.forEach { it.value.clear() } }
     }
 
-    fun incLock(pair: String, type: BookType) = (this[pair]!![type]!!.lockCounter++)
+    fun incLock(pair: String, type: BookType) = this[pair]!![type]!!.lockCounter.incrementAndGet()
 
-    fun decLock(pair: String, type: BookType) = (this[pair]!![type]!!.lockCounter--)
+    fun decLock(pair: String, type: BookType) = this[pair]!![type]!!.lockCounter.decrementAndGet()
 
-    fun isLocked(pair: String, type: BookType) = this[pair]?.get(type)?.run { lockCounter > 0 } ?: false
+    fun isLocked(pair: String, type: BookType) = this[pair]?.get(type)?.run { lockCounter.get() > 0 } ?: false
 
     fun clearBook() = this.forEach { it.value.forEach { it.value.clear() } }
 
@@ -140,36 +141,32 @@ class DepthBook() : MutableMap<String, DepthType> by mutableMapOf() {
 //        }
     }
 
-    fun removeRate(upd: Update): Int? = this[upd.pair]?.get(upd.type)?.let {
-        it.nonce ++
-        it.indexOfFirst { it.rate == upd.rate }.let { index ->
-            if (index == -1) {
-                return null
-            } else {
-                return it.remove(it[index]).takeIf { it }?.run { index }
-            }
+    fun removeRate(upd: Update): Int? = this[upd.pair]?.get(upd.type)?.let { depthList ->
+        depthList.nonce ++
+        depthList.indexOfFirst { it.rate == upd.rate }.let { index ->
+            takeIf { index != -1 }?.run { depthList.remove(depthList[index]).takeIf { it }?.run { index } }
         }
     }
 
-    fun updateRate(upd: Update): Int? = this[upd.pair]?.get(upd.type)?.let {
-        it.nonce ++
-        when (val index = it.indexOfFirst { it.rate == upd.rate }) {
+    fun updateRate(upd: Update): Int? = this[upd.pair]?.get(upd.type)?.let { depthList ->
+        depthList.nonce ++
+        when (val index = depthList.indexOfFirst { it.rate == upd.rate }) {
             -1 -> {
                 val indexToInsert = when (upd.type) {
-                    BookType.asks -> it.indexOfFirst { it.rate > upd.rate }
-                    BookType.bids -> it.indexOfFirst { it.rate < upd.rate }
+                    BookType.asks -> depthList.indexOfFirst { it.rate > upd.rate }
+                    BookType.bids -> depthList.indexOfFirst { it.rate < upd.rate }
                 }
 
                 if (indexToInsert == -1) {
-                    it.add(Depth(upd.rate, upd.amount!!))
-                    return it.size
+                    depthList.add(Depth(upd.rate, upd.amount!!))
+                    return depthList.size
                 } else {
-                    it.add(indexToInsert, Depth(upd.rate, upd.amount!!))
+                    depthList.add(indexToInsert, Depth(upd.rate, upd.amount!!))
                     return indexToInsert
                 }
             }
             else -> {
-                it.get(index).amount = upd.amount!!
+                depthList.get(index).amount = upd.amount!!
                 return index
             }
         }

@@ -8,6 +8,10 @@ import org.kodein.di.direct
 import org.kodein.di.generic.instance
 import org.kodein.di.newInstance
 import api.Transfer
+import data.Balance
+import data.CrossBalance
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import utils.local2joda
 import java.math.BigDecimal
 import java.time.Instant
@@ -23,7 +27,7 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
     init {
 
         transaction {
-            SchemaUtils.create(Currencies, Pairs, Stocks, Stock_Pair, Stock_Currency, Api_Keys, Wallet, Rates)
+            SchemaUtils.create(Currencies, Cross_Limits, Cross_Limits_Less, Pairs, Stocks, Stock_Pair, Stock_Currency, Api_Keys, TestWallet, Wallet, Rates)
         }
 
 //        val stocks = RutData.getStocks().associateBy({ it }) { initStock(it) }
@@ -55,7 +59,7 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
 
     override val pairs: Map<String, Int> by lazy { transaction { Pairs.selectAll().associateBy({ it[Pairs.type] }) { it[Pairs.id] } } }
     private val stocks: Map<String, StockInfo> by lazy {transaction {
-        Stocks.selectAll().associateBy({ it[Stocks.name] }) { StockInfo(it[Stocks.id], it[Stocks.history_last_id]) }
+        Stocks.selectAll().associateBy({ it[Stocks.name] }) { StockInfo(it[Stocks.id], it[Stocks.walletRatio], it[Stocks.history_last_id]) }
     } }
     override val currencies: Map<String, CurrencyInfo> by lazy { transaction {
         Currencies.selectAll().associateBy({ it[Currencies.type] })
@@ -92,7 +96,7 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
         }
     }
 
-    override fun getKeys(name: String) = transaction {
+    override fun getKeys(name: String, keyName: String) = transaction {
         Api_Keys.innerJoin(Stocks).select { Stocks.name.eq(name) }.map {
             StockKey(it[Api_Keys.apikey], it[Api_Keys.secret], it[Api_Keys.nonce], it[Api_Keys.type])
         }
@@ -122,12 +126,64 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
             }
     }
 
+    override fun getCrossLimits(stock: String, runningStocks: Set<String>, less: Boolean): CrossBalance {
+        val cl = CrossBalance()
+
+        transaction {
+            val s1 = Stocks.alias("stockFrom")
+            val s2 = Stocks.alias("stockTo")
+
+            if (less) {
+                Cross_Limits_Less
+                    .innerJoin(s1, { Cross_Limits_Less.stock_id_from }, { s1[Stocks.id] })
+                    .innerJoin(s2, { Cross_Limits_Less.stock_id_to }, { s2[Stocks.id] })
+                    .innerJoin(Currencies)
+                    .select { s1[Stocks.name].eq(stock) and s2[Stocks.name].inList(runningStocks.toList()) }
+                    .forEach {
+                        cl.getOrPut(it[s2[Stocks.name]]) { mutableMapOf() }.getOrPut(it[Currencies.type]) { mutableMapOf() }
+                            .getOrPut(PlayType.LIMIT) {
+                                Balance(it[Cross_Limits_Less.limit], it[Cross_Limits_Less.progress], it[Cross_Limits_Less.stop])
+                            }
+                        cl.getOrPut(it[s2[Stocks.name]]) { mutableMapOf() }
+                            .getOrPut(it[Currencies.type]) { mutableMapOf() }
+                            .getOrPut(PlayType.FULL) {
+                                Balance(BigDecimal.ZERO, BigDecimal.ZERO, it[Cross_Limits_Less.stop])
+                            }
+                    }
+            } else {
+                Cross_Limits.innerJoin(s1, { Cross_Limits.stock_id_from }, { s1[Stocks.id] })
+                    .innerJoin(s2, { Cross_Limits.stock_id_to }, { s2[Stocks.id] })
+                    .innerJoin(Currencies)
+                    .slice(Cross_Limits.run { listOf(s2[Stocks.name], Currencies.type, limit, progress, limit_full, progress_full, stop) })
+                    .select { s1[Stocks.name].eq(stock) and s2[Stocks.name].inList(runningStocks.toList() - stock) }
+                    .forEach {
+                        Cross_Limits.run {
+                            cl.getOrPut(it[s2[database.Stocks.name]]) { kotlin.collections.mutableMapOf() }
+                                .getOrPut(it[database.Currencies.type]) { kotlin.collections.mutableMapOf() }
+                                .getOrPut(PlayType.LIMIT) { data.Balance(it[limit], it[progress], it[stop]) }
+                            cl.getOrPut(it[s2[database.Stocks.name]]) { kotlin.collections.mutableMapOf() }
+                                .getOrPut(it[database.Currencies.type]) { kotlin.collections.mutableMapOf() }
+                                .getOrPut(PlayType.FULL) { data.Balance(it[limit_full], it[progress_full], it[stop]) }
+                        }
+                    }
+            }
+        }
+
+        return cl
+    }
+
     override fun saveNonce(key: StockKey) {
         transaction {
             Api_Keys.update({ Api_Keys.apikey.eq(key.key) and Api_Keys.secret.eq(key.secret) }) {
                 it[Api_Keys.nonce] = key.nonce
             }
         }
+    }
+
+    override fun getTestWallet(stock: String) = transaction {
+        TestWallet.innerJoin(Stocks).innerJoin(Currencies).select { Stocks.name.eq(stock) }.map {
+            it[Currencies.type] to it[TestWallet.amount]
+        }.toMap().toMutableMap()
     }
 
     override fun updateStockPairs(update: Map<String, PairInfo>, stockName: String) {
@@ -217,9 +273,9 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
         }
     }
 
-    override fun saveHistoryId(id: Long, stock_id: Int) {
+    override fun saveHistoryId(id: Long, stockName: String) {
         transaction {
-            Stocks.update({ Stocks.id.eq(stock_id) }) {
+            Stocks.update({ Stocks.name.eq(stockName) }) {
                 it[Stocks.history_last_id] = id
             }
         }
