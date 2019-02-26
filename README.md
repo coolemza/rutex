@@ -19,4 +19,18 @@ then
 ```gradle
 gradlew run
 ```
-open localhost:9009 to watch implemented stocks info
+open localhost:9009 to watch implemented stocks info, for wallets info use keys.json like:
+```json
+{
+  keys: {
+    Kraken:[
+      {key:WALLET_KEY,secret:WALLET_KEY_SERET,type:WALLET},
+      {key:TRADE_KEY,secret:TRADE_KEY_SECRET,type:TRADE},
+      {key:HISTORY_KEY,secret:HISTORY_KEY_SECRET,type:HISTORY},
+      {key:WITHDRAW_KEY,secret:WITHDRAW_KEY_SECRET,type:WITHDRAW},
+      {key:ACTIVE_KEY,secret:ACTIVE_KEY_SECRET,type:ACTIVE}
+    ]
+  }
+}
+```
+

@@ -124,7 +124,6 @@ object RutData {
 //                        Key(key = "", secret = "", type = KeyType.TRADE),
 //                        Key(key = "", secret = "", type = KeyType.TRADE),
 //                        Key(key = "", secret = "", type = KeyType.HISTORY),
-//                        Key(key = "", secret = "", type = KeyType.DEBUG),
 //                        Key(key = "", secret = "", type = KeyType.WITHDRAW),
 //                        Key(key = "", secret = "", type = KeyType.ACTIVE)
                 ),
@@ -134,7 +133,6 @@ object RutData {
 //                        Key(key = "", secret = "", type = KeyType.TRADE),
 //                        Key(key = "", secret = "", type = KeyType.TRADE),
 //                        Key(key = "", secret = "", type = KeyType.HISTORY),
-//                        Key(key = "", secret = "", type = KeyType.DEBUG),
 //                        Key(key = "", secret = "", type = KeyType.WITHDRAW),
 //                        Key(key = "", secret = "", type = KeyType.ACTIVE)                )
         )))
