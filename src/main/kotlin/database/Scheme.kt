@@ -65,7 +65,7 @@ object Rates: Table() {
     val date = datetime("date")
     val stock_id = integer("stock_id")
     val pair_id = integer("pair_id")
-    val type = enumeration("type", BookType::class.java)
+    val type = enumeration("type", BookType::class)
     val rate = decimal("rate", 20, 8)
     val amount = decimal("amount", 20, 8).nullable()
     val full = bool("full").default(false)
@@ -131,7 +131,7 @@ object Wallet: Table() {
     val date = datetime("date")
     val stock_id = integer("stock_id") references Stocks.id
     val currency_id = integer("currency_id") references  Currencies.id
-    val type = enumeration("type", WalletType::class.java)
+    val type = enumeration("type", WalletType::class)
     val amount = decimal("amount", 20, 8)
     init { uniqueIndex(stock_id, currency_id, type) }
 }

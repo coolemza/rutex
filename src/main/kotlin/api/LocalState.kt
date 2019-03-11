@@ -111,8 +111,8 @@ class LocalState(override val kodein: Kodein) : IState, KLoggable, KodeinAware {
         coroutineScope {
             stockList.forEach {
                 launch(handler) {
-                    it.value.updateCurrencyInfo(forceUpdate = true)
-                    it.value.updatePairInfo(forceUpdate = true)
+                    it.value.updateCurrencyInfo()
+                    it.value.updatePairInfo()
                 }
             }
         }

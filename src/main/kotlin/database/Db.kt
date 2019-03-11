@@ -252,8 +252,9 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
 
     override fun updateCrossFee(update: Map<String, CrossFee>, stockName: String) = transaction {
         update.forEach { cur, fee ->
-            Stock_Currency.update({ Stock_Currency.currency_id.eq(currencies[cur]!!.id) and
-                    Stock_Currency.stock_id.eq(stocks[stockName]!!.id) }) {
+            Stock_Currency.update(
+                { Stock_Currency.run { currency_id.eq(currencies[cur]!!.id) and stock_id.eq(stocks[stockName]!!.id) } }
+            ) {
                 it[Stock_Currency.deposit_min] = fee.depositFee.min
                 it[Stock_Currency.deposit_percent] = fee.depositFee.percent
                 it[Stock_Currency.withdraw_min] = fee.withdrawFee.min
@@ -263,12 +264,12 @@ open class Db(final override val kodein: Kodein) : IDb, KodeinAware {
     }
 
     override fun updateTradeFee(update: Map<String, TradeFee>, stockName: String) = transaction {
-        update.forEach { p ->
-            Stock_Pair.innerJoin(Pairs).innerJoin(Stocks)
-                .update({ Pairs.type.eq(p.key) and Stocks.name.eq(stockName) }) {
-                    it[Stock_Pair.minAmount] = p.value.minAmount
-                    it[Stock_Pair.makerFee] = p.value.makerFee
-                    it[Stock_Pair.takerFee] = p.value.takerFee
+        update.forEach { pair, fee ->
+            Stock_Pair
+                .update({ Stock_Pair.pair_id.eq(pairs[pair]!!) and Stock_Pair.stock_id.eq(stocks[stockName]!!.id) }) {
+                    it[Stock_Pair.minAmount] = fee.minAmount
+                    it[Stock_Pair.makerFee] = fee.makerFee
+                    it[Stock_Pair.takerFee] = fee.takerFee
                 }
         }
     }
