@@ -8,7 +8,7 @@ Kotlin cryptocurrency exchange interface
 * [HkariCP](https://github.com/brettwooldridge/HikariCP) as SQL connection pool
 * [Exposed](https://github.com/JetBrains/Exposed) as SQL DSL
 * [Ktor](https://github.com/ktorio/ktor) as web framework
-* Kotlin coroutines, actors, channels to handle high frequency depth update
+* [Kotlin coroutines](https://github.com/Kotlin/kotlinx.coroutines), actors, channels to handle high frequency depth update
 
 ## Build and run
 use
